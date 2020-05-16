@@ -22,7 +22,7 @@ macro_rules! loop_frame_func {
 
     // prop / multiplier macros
 
-    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident, $props:ident, $multipliers:ident) $func:tt) => {
+    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident, $props:ident, $multipliers:ident) $func:block) => {
         #[cfg(not(feature = "parallel"))]
         pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64]) {
             let first_frame = &$src_clips[0];
@@ -65,7 +65,7 @@ macro_rules! loop_frame_func {
     // ==============================================================
     // non prop / multiplier macros
 
-    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident) $func:tt) => {
+    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident) $func:block) => {
         #[cfg(not(feature = "parallel"))]
         pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef]) {
             let first_frame = &$src_clips[0];
