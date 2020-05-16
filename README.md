@@ -96,7 +96,7 @@ cargo build --release
 - _Q: How fast is `vs-average`?_ <br />
    A: Pretty fast, `vs-average` implements multithreading in the default build, allowing for a huge throughput. In fact, the main bottlenecks I've noticed is drive latency (Observed up to ~100MiB/s sustained random reads), and decode speed (decoding 11 AVC bitstreams isn't easy). For fastest speeds with multiple clips, I'd suggest using something akin to [dgdecodenv](http://rationalqm.us/dgdecnv/dgdecnv.html) for decoding acceleration via CUDA, and all source files on one (or multiple) SSDs.
 
-   Note that all my tests have been performed using `lsmas.LWLibavSource` to index and decode souce files, on an R9 3900x with 32giB of ram.
+   Note that all my tests have been performed using `lsmas.LWLibavSource` to index and decode souce files, on an R9 3900x with 32GiB of ram.
 
  - _Q: Do you plan to write more useless plugins?_ <br />
    A: Yup, rust is pretty cool, [vapoursynth-rs](https://github.com/YaLTeR/vapoursynth-rs) is brilliant, and I'm full of dumb ideas :^)
