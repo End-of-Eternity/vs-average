@@ -52,13 +52,7 @@ median_int!(u16, median_u16);
 median_int!(u32, median_u32);
 
 pub struct Median<'core> {
-    clips: Vec<Node<'core>>,
-}
-
-impl<'core> Median<'core> {
-    pub fn new(clips: Vec<Node<'core>>) -> Self {
-        Self { clips }
-    }
+    pub clips: Vec<Node<'core>>,
 }
 
 impl<'core> Filter<'core> for Median<'core> {
