@@ -75,6 +75,8 @@ make_filter_function! {
         _core: CoreRef<'core>,
         clips: ValueIter<'_, 'core, Node<'core>>,
         output_depth: Option<i64>,
+        preset: Option<i64>,
+        multipliers: Option<ValueIter<'_, 'core, f64>>
     ) -> Result<Option<Box<dyn Filter<'core> + 'core>>, Error> {
         let clips = clips.collect::<Vec<_>>();
         check_clips(&clips)?;
@@ -103,7 +105,19 @@ make_filter_function! {
             _ => (),
         }
 
-        Ok(Some(Box::new(Mean { clips, output_depth })))
+        let multipliers = match multipliers {
+            Some(multipliers) => multipliers.collect::<Vec<_>>(),
+            _ => match preset {
+                Some(1) => vec![1.82, 1.3, 1.0], // x264 / 5
+                _ => vec![1.0, 1.0, 1.0], // balenced
+            },
+        };
+
+        if multipliers.len() != 3 {
+            bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]")
+        }
+
+        Ok(Some(Box::new(Mean { clips, output_depth, multipliers })))
     }
 }
 

@@ -13,9 +13,19 @@ use crate::{PLUGIN_NAME, loop_frame_func, property};
 macro_rules! mean_int {
     ($depth_in:ty, $depth_out:ty, $op:tt, $n:literal, $fname:ident) => {
         loop_frame_func! {
-            $fname<$depth_in, $depth_out>(src_clips, src_rows, i, pixel) {
-                let mean = src_rows.iter().map(|f| (f[i] as u64) $op $n).sum::<u64>() / src_clips.len() as u64;
-                *pixel = mean as $depth_out;
+            $fname<$depth_in, $depth_out>(src_clips, src_rows, i, pixel, props, multipliers) {
+                let pixels = src_rows.iter().map(|f| ((f[i] as u64) $op $n ) as f64).collect::<Vec<_>>(); //.sum::<u64>() / src_clips.len() as u64;
+                let mut total = 0.0;
+                let mut weighted: Vec<f64> = Vec::new();
+                for p in 0..pixels.len() {
+                    match props[p] {
+                        b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
+                        b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
+                        b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                        _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
+                    }
+                }
+                *pixel = (weighted.iter().sum::<f64>() / total) as $depth_out;
             }
         }
     };
@@ -76,33 +86,75 @@ mean_int!(u32, u32, <<, 0, mean_u32_u32);
 
 // f16 -> f16
 loop_frame_func! {
-    mean_f16_f16<u16, u16>(src_frames, src, i, pixel) {
-        let mean = src.iter().map(|f| f16::from_bits(f[i]).to_f32()).sum::<f32>() / src_frames.len() as f32;
-        *pixel = f16::from_f32(mean).to_bits();
+    mean_f16_f16<u16, u16>(src_frames, src_rows, i, pixel, props, multipliers) {
+        let pixels = src_rows.iter().map(|f| f16::from_bits(f[i]).to_f64()).collect::<Vec<_>>();
+        let mut total = 0.0;
+        let mut weighted: Vec<f64> = Vec::new();
+        for p in 0..pixels.len() {
+            match props[p] {
+                b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
+                b'P' => { weighted.push(pixels[p] * multipliers[1]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[2]); total += multipliers[2] },
+                _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
+            }
+        }
+        *pixel = f16::from_f64(weighted.iter().sum::<f64>() / total).to_bits();
     }
 }
 
 // f16 -> f32
 loop_frame_func! {
-    mean_f16_f32<u16, f32>(src_frames, src, i, pixel) {
-        let mean = src.iter().map(|f| f16::from_bits(f[i]).to_f32()).sum::<f32>() / src_frames.len() as f32;
-        *pixel = mean;
+    mean_f16_f32<u16, f32>(src_frames, src_rows, i, pixel, props, multipliers) {
+        let pixels = src_rows.iter().map(|f| f16::from_bits(f[i]).to_f64()).collect::<Vec<_>>();
+        let mut total = 0.0;
+        let mut weighted: Vec<f64> = Vec::new();
+        for p in 0..pixels.len() {
+            match props[p] {
+                b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
+                b'P' => { weighted.push(pixels[p] * multipliers[1]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[2]); total += multipliers[2] },
+                _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
+            }
+        }
+        *pixel = (weighted.iter().sum::<f64>() / total) as f32;
     }
 }
 
 // f32 -> f16
 loop_frame_func! {
-    mean_f32_f16<f32, u16>(src_frames, src, i, pixel) {
-        let mean = src.iter().map(|f| f[i]).sum::<f32>() / src_frames.len() as f32;
-        *pixel = f16::from_f32(mean).to_bits();
+    mean_f32_f16<f32, u16>(src_frames, src_rows, i, pixel, props, multipliers) {
+        let pixels = src_rows.iter().map(|f| f[i] as f64).collect::<Vec<_>>();
+        //*pixel = f16::from_f32(mean).to_bits();
+        let mut total = 0.0;
+        let mut weighted: Vec<f64> = Vec::new();
+        for p in 0..pixels.len() {
+            match props[p] {
+                b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
+                b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
+            }
+        }
+        *pixel = f16::from_f64(weighted.iter().sum::<f64>() / total).to_bits();
     }
 }
 
 // f32 -> f32
 loop_frame_func! {
-    mean_f32_f32<f32, f32>(src_frames, src, i, pixel) {
-        let mean = src.iter().map(|f| f[i]).sum::<f32>() / src_frames.len() as f32;
-        *pixel = mean;
+    mean_f32_f32<f32, f32>(src_frames, src_rows, i, pixel, props, multipliers) {
+        let pixels = src_rows.iter().map(|f| f[i] as f64).collect::<Vec<_>>();
+        //*pixel = f16::from_f32(mean).to_bits();
+        let mut total = 0.0;
+        let mut weighted: Vec<f64> = Vec::new();
+        for p in 0..pixels.len() {
+            match props[p] {
+                b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
+                b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
+            }
+        }
+        *pixel = (weighted.iter().sum::<f64>() / total) as f32;
     }
 }
 
@@ -111,6 +163,8 @@ pub struct Mean<'core> {
     pub clips: Vec<Node<'core>>,
     // output bitdepth
     pub output_depth: u8, 
+    // IPB muiltiplier ratios
+    pub multipliers: Vec<f64>
 }
 
 impl<'core> Filter<'core> for Mean<'core> {
@@ -179,26 +233,26 @@ impl<'core> Filter<'core> for Mean<'core> {
                 let input_depth = property!(info.format).bits_per_sample();
                 // match input and output depths to correct functions
                 match (input_depth, self.output_depth) {
-                    (8, 8)  =>  mean_u8_u8   (&mut frame, &src_frames),
-                    (8, 16) =>  mean_u8_u16  (&mut frame, &src_frames),
-                    (8, 32) =>  mean_u8_u32  (&mut frame, &src_frames),
+                    (8, 8)  =>  mean_u8_u8   (&mut frame, &src_frames, &self.multipliers),
+                    (8, 16) =>  mean_u8_u16  (&mut frame, &src_frames, &self.multipliers),
+                    (8, 32) =>  mean_u8_u32  (&mut frame, &src_frames, &self.multipliers),
                     
-                    (10, 8)  => mean_u10_u8  (&mut frame, &src_frames),
-                    (10, 16) => mean_u10_u16 (&mut frame, &src_frames),
-                    (10, 32) => mean_u10_u32 (&mut frame, &src_frames),
+                    (10, 8)  => mean_u10_u8  (&mut frame, &src_frames, &self.multipliers),
+                    (10, 16) => mean_u10_u16 (&mut frame, &src_frames, &self.multipliers),
+                    (10, 32) => mean_u10_u32 (&mut frame, &src_frames, &self.multipliers),
 
-                    (12, 8)  => mean_u12_u8  (&mut frame, &src_frames),
-                    (12, 16) => mean_u12_u16 (&mut frame, &src_frames),
-                    (12, 32) => mean_u12_u32 (&mut frame, &src_frames),
+                    (12, 8)  => mean_u12_u8  (&mut frame, &src_frames, &self.multipliers),
+                    (12, 16) => mean_u12_u16 (&mut frame, &src_frames, &self.multipliers),
+                    (12, 32) => mean_u12_u32 (&mut frame, &src_frames, &self.multipliers),
 
-                    (16, 8)  => mean_u16_u8  (&mut frame, &src_frames),
-                    (16, 16) => mean_u16_u16 (&mut frame, &src_frames),
-                    (16, 32) => mean_u16_u32 (&mut frame, &src_frames),
+                    (16, 8)  => mean_u16_u8  (&mut frame, &src_frames, &self.multipliers),
+                    (16, 16) => mean_u16_u16 (&mut frame, &src_frames, &self.multipliers),
+                    (16, 32) => mean_u16_u32 (&mut frame, &src_frames, &self.multipliers),
 
 
-                    (32, 8)  => mean_u32_u8  (&mut frame, &src_frames),
-                    (32, 16) => mean_u32_u16 (&mut frame, &src_frames),
-                    (32, 32) => mean_u32_u32 (&mut frame, &src_frames),
+                    (32, 8)  => mean_u32_u8  (&mut frame, &src_frames, &self.multipliers),
+                    (32, 16) => mean_u32_u16 (&mut frame, &src_frames, &self.multipliers),
+                    (32, 32) => mean_u32_u32 (&mut frame, &src_frames, &self.multipliers),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported with output depth {}", PLUGIN_NAME, input_depth, self.output_depth),
                 }
@@ -206,11 +260,11 @@ impl<'core> Filter<'core> for Mean<'core> {
             SampleType::Float => {
                 let input_depth = property!(info.format).bits_per_sample();
                 match (input_depth, self.output_depth) {
-                    (16, 16) => mean_f16_f16(&mut frame, &src_frames),
-                    (16, 32) => mean_f16_f32(&mut frame, &src_frames),
+                    (16, 16) => mean_f16_f16(&mut frame, &src_frames, &self.multipliers),
+                    (16, 32) => mean_f16_f32(&mut frame, &src_frames, &self.multipliers),
                     
-                    (32, 16) => mean_f32_f16(&mut frame, &src_frames),
-                    (32, 32) => mean_f32_f32(&mut frame, &src_frames),
+                    (32, 16) => mean_f32_f16(&mut frame, &src_frames, &self.multipliers),
+                    (32, 32) => mean_f32_f32(&mut frame, &src_frames, &self.multipliers),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported with output depth {}", PLUGIN_NAME, input_depth, self.output_depth),
                 }

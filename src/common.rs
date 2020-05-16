@@ -19,6 +19,52 @@ unsafe impl<'core> Sync for FrameRefMutPointer<'core> {}
 
 #[macro_export]
 macro_rules! loop_frame_func {
+
+    // prop / multiplier macros
+
+    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident, $props:ident, $multipliers:ident) $func:tt) => {
+        #[cfg(not(feature = "parallel"))]
+        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64]) {
+            let first_frame = &$src_clips[0];
+            let $props = $src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
+            for plane in 0..first_frame.format().plane_count() {
+                for row in 0..first_frame.height(plane) {
+                    let $src_rows = $src_clips.iter().map(|f| f.plane_row::<$bits_per_sample_in>(plane, row)).collect::<Vec<_>>();
+                    for ($i, $pixel) in frame.plane_row_mut::<$bits_per_sample_out>(plane, row).iter_mut().enumerate() {
+                        $func
+                    }
+                }
+            }
+        }
+
+        #[cfg(feature = "parallel")]
+        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64]) {
+            use ::rayon::prelude::*;
+            use $crate::common::FrameRefMutPointer;
+
+            let first_frame = &$src_clips[0];
+            let frame = FrameRefMutPointer(frame as *mut _ as *const _);
+            let $props = $src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>();
+            (0..first_frame.format().plane_count()).into_par_iter()
+                .for_each(|plane| {
+                    (0..first_frame.height(plane)).into_par_iter()
+                        .for_each(|row| {
+                            let frame = unsafe { &mut *(frame.0 as *mut FrameRefMut) };
+                            let $src_rows = $src_clips.par_iter().map(|f| f.plane_row::<$bits_per_sample_in>(plane, row)).collect::<Vec<_>>();
+                            frame.plane_row_mut::<$bits_per_sample_out>(plane, row)
+                                .par_iter_mut()
+                                .enumerate()
+                                .for_each(|($i, $pixel)| {
+                                    $func
+                                });
+                        });
+                });
+        }
+    };
+
+    // ==============================================================
+    // non prop / multiplier macros
+
     ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident) $func:tt) => {
         #[cfg(not(feature = "parallel"))]
         pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef]) {
