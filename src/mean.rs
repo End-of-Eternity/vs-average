@@ -20,8 +20,8 @@ macro_rules! mean_int {
                 for p in 0..pixels.len() {
                     match props[p] {
                         b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
-                        b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
-                        b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                        b'P' => { weighted.push(pixels[p] * multipliers[1]); total += multipliers[1] },
+                        b'B' => { weighted.push(pixels[p] * multipliers[2]); total += multipliers[2] },
                         _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
                     }
                 }
@@ -130,8 +130,8 @@ loop_frame_func! {
         for p in 0..pixels.len() {
             match props[p] {
                 b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
-                b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
-                b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                b'P' => { weighted.push(pixels[p] * multipliers[1]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[2]); total += multipliers[2] },
                 _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
             }
         }
@@ -149,8 +149,8 @@ loop_frame_func! {
         for p in 0..pixels.len() {
             match props[p] {
                 b'I' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[0] },
-                b'P' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[1] },
-                b'B' => { weighted.push(pixels[p] * multipliers[0]); total += multipliers[2] },
+                b'P' => { weighted.push(pixels[p] * multipliers[1]); total += multipliers[1] },
+                b'B' => { weighted.push(pixels[p] * multipliers[2]); total += multipliers[2] },
                 _ => { weighted.push(pixels[p] * 1.0); total += 1.0 },
             }
         }
