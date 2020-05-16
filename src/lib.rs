@@ -63,7 +63,7 @@ make_filter_function! {
         let clips = clips.collect::<Vec<_>>();
         check_clips(&clips)?;        
 
-        Ok(Some(Box::new(Median::new(clips))))
+        Ok(Some(Box::new(Median { clips })))
     }
 }
 

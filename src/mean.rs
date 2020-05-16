@@ -3,11 +3,11 @@
 #![allow(arithmetic_overflow)]
 
 use failure::{Error, bail, format_err};
+use half::f16;
 use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
 use vapoursynth::video_info::{VideoInfo, Property};
-use half::f16;
 use crate::{PLUGIN_NAME, loop_frame_func, property};
 
 macro_rules! mean_int {
