@@ -106,3 +106,4 @@ cargo build --release
  - EoE
     - Discord: `End of Eternity#6292`
  - Nephren
+    - Discord: `Rin-go#8647`
