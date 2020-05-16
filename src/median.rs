@@ -8,25 +8,33 @@ use vapoursynth::video_info::VideoInfo;
 use crate::{PLUGIN_NAME, loop_frame_func, property};
 
 macro_rules! median_int {
-    ($int:ty, $fname:ident) => {
-        loop_frame_func! {
-            $fname<$int, $int>(src_frames, src, i, pixel) {
-                let mut values = src.iter().map(|f| f[i]).collect::<Vec<_>>();
-                values.sort_unstable();
-
-                let median = if values.len() & 1 == 1 {
-                    // odd length
-                    values[(values.len() - 1) / 2]
-                } else {
-                    // even length
-                    let middle = values.len() / 2;
-                    (values[middle - 1] + values[middle]) / 2
-                };
-
-                *pixel = median;
+    ($($fname:ident<$depth:ty>;)*) => {
+        $(
+            loop_frame_func! {
+                $fname<$depth, $depth>(src_frames, src, i, pixel) {
+                    let mut values = src.iter().map(|f| f[i]).collect::<Vec<_>>();
+                    values.sort_unstable();
+    
+                    let median = if values.len() & 1 == 1 {
+                        // odd length
+                        values[(values.len() - 1) / 2]
+                    } else {
+                        // even length
+                        let middle = values.len() / 2;
+                        (values[middle - 1] + values[middle]) / 2
+                    };
+    
+                    *pixel = median;
+                }
             }
-        }
+        )*
     };
+}
+
+median_int! {
+    median_u8<u8>;
+    median_u16<u16>;
+    median_u32<u32>;
 }
 
 loop_frame_func! {
@@ -46,10 +54,6 @@ loop_frame_func! {
         *pixel = median;
     }
 }
-
-median_int!(u8, median_u8);
-median_int!(u16, median_u16);
-median_int!(u32, median_u32);
 
 pub struct Median<'core> {
     pub clips: Vec<Node<'core>>,
