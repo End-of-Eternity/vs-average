@@ -1,7 +1,5 @@
 // Copyright (c) EoE & Nephren 2020. All rights reserved.
 
-#![allow(arithmetic_overflow)]
-
 use failure::{Error, bail, format_err};
 use half::f16;
 use vapoursynth::prelude::*;
