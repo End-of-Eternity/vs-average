@@ -28,7 +28,7 @@ Note that the input format must be the same for all inputted clips.
 Mean will set the output pixel to the average (or mean) of the input pixels from each clip.
 
 ```python
-average.Mean(clip[] clips[, output_depth=clips[0].format.bits_per_sample])
+average.Mean(clip[] clips[, int output_depth=clips[0].format.bits_per_sample], int preset, float[] multipliers)
 ```
 
 - clips:<br />
@@ -38,13 +38,23 @@ average.Mean(clip[] clips[, output_depth=clips[0].format.bits_per_sample])
     Bitdepth of the output. Will default to the same as `clips[0]`.<br />
     Only 8, 16 or 32 bit is supported.<br />
     Since all calculations are done interally as u64's (or f32's), it's far more efficient to input your sources as 8 bit, and return as 16 bit with the increased precision. In the case that you want to directly output the clip returned by `Mean`, I'd suggest you return a 16 bit clip, and dither down using `resize.Point` or similar, even for 16 -> 8 bit, due to an internal rounding error. Significant improvements can be observed over returning a higher bitdepth clip, and dithering down, than a lower bitdepth clip. For this same reason, returning a 10 or 12 bit clip is not supported (And also because I'm lazy). For more information, see the comments in `mean.rs`.
+  
+- preset:<br />
+    Integer based preset value for per frame type weightings. See below for how this works. Currently only one preset is implemented. Any other inputs than the ones stated below (or none) will be interpreted as `multipliers=[0, 0, 0]` (no weighting).
+    
+    1. Reverse (default) x264/5 based ip/pb qp offset ratios. (`--ipratio 1.4 --pbratio 1.3`). Works for other encoders/ratios as well (though may be less effective)<br />
+     _Equivalent to `multipliers=[1.82, 1.3, 1.0]`_
+
+- multipliers:<br />
+    I, P and B frame multipliers, for per frame weighting. Useful for when you want `average.Mean` to favour I frames. Can be used to (simply) reverse higher b and p frame quantization. As an example, if you only wanted I and P frames to be selected for averaging, you could use `multipliers=[1, 1, 0]`. Differences with larger amounts of clips when using `preset=1` are negligable, but do exist, so it might be worth leaving on. It may also be worth increasing the I and P frame multipliers by a small amount from `preset=1`, especially if fast motion interpolation algorithms were used on sources, thereby further decreasing the quality of P and B frames.
+
 
 ### Median
 
 Median will set the output pixel to the Median (middle value of the sorted data) of the input pixels from each clip.
 
 ```python
-average.Mean(clip[] clips])
+average.Median(clip[] clips])
 ```
 
 - clips:<br />
