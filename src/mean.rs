@@ -101,9 +101,11 @@ pub struct Mean<'core> {
 
 impl<'core> Filter<'core> for Mean<'core> {
     fn video_info(&self, _: API, core: CoreRef<'core>) -> Vec<VideoInfo<'core>> {
+        // Only change between the input and the output is the format, which is constructed below
+        let VideoInfo { format, framerate, resolution, num_frames, flags } = self.clips[0].info();
         
         // register the format for the output --> this needs to be done in case the output format doesn't yet exists
-        let format_in: vapoursynth::format::Format<'core> = property!(self.clips[0].info().format);
+        let format_in = property!(format);
         let format_out = core.register_format(
             format_in.color_family(), 
             format_in.sample_type(), 
@@ -112,10 +114,7 @@ impl<'core> Filter<'core> for Mean<'core> {
             format_in.sub_sampling_h(),
         ).unwrap(); // safe to unwrap since inputs were sanity checked in lib.rs
 
-        // Only change between the input and the output is the format, which was constructed above
-        let VideoInfo { framerate, resolution, num_frames, flags, .. } = self.clips[0].info();
-
-        vec![VideoInfo {format:Property::Constant(format_out), framerate, resolution, num_frames, flags }]
+        vec![VideoInfo { format: Property::Constant(format_out), framerate, resolution, num_frames, flags }]
     }
 
     fn get_frame_initial(
