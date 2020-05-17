@@ -1,22 +1,22 @@
 // Copyright (c) EoE & Nephren 2020. All rights reserved.
 
 use failure::{Error, bail, format_err};
-use half::f16;
 use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
 use vapoursynth::video_info::{VideoInfo, Property};
 use crate::{PLUGIN_NAME, loop_frame_func, property};
+use crate::common::*;
 
 // macro for the int based mean filter. $op and $n are for bitshifting for conversions between different bit depths (this could be done using negative bitshifts too)
-macro_rules! mean_int {
-    ($($fname:ident<$depth_in:ty => $depth_out:ty>($op:tt $n:literal);)*) => {
+macro_rules! mean_func {
+    ($($fname:ident<$depth_in:ty => $depth_out:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
         $(
             loop_frame_func! {
-                $fname<$depth_in, $depth_out>(src_clips, src_rows, i, pixel, props, multipliers) {
+                $fname<$depth_in, $depth_out>(src_frames, src_rows, i, pixel, props, multipliers) {
                     let mut total = 0.0;
                     let weighted = src_rows.iter()
-                        .map(|f| ((f[i] as u64) $op $n ) as f64)
+                        .map(|f| $depth_in_to_f64(f[i]))
                         .enumerate()
                         .map(|(p, f)| match props[p] {
                             b'I' => { total += multipliers[0]; f * multipliers[0] },
@@ -25,7 +25,7 @@ macro_rules! mean_int {
                             _ => { total += 1.0; f * 1.0 },
                         });
     
-                    *pixel = (weighted.sum::<f64>() / total) as $depth_out;
+                    *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
                 }
             }
         )*
@@ -56,73 +56,34 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
 
 // Construction of integer based filters
 
-mean_int! {
+mean_func! {
     // 8 bit functions
-    mean_u8_u8<u8 => u8>(<< 0);
-    mean_u8_u16<u8 => u16>(<< 8);
-    mean_u8_u32<u8 => u32>(<< 24);
+    mean_u8_u8<u8 => u8>(u8_u8_to_f64, f64_to_u8);
+    mean_u8_u16<u8 => u16>(u8_u16_to_f64, f64_to_u16);
+    mean_u8_u32<u8 => u32>(u8_u32_to_f64, f64_to_u32);
 
     // 10 bit functions
-    mean_u10_u8<u16 => u8>(>> 2);
-    mean_u10_u16<u16 => u16>(<< 4);
-    mean_u10_u32<u16 => u32>(<< 22);
+    mean_u10_u8<u16 => u8>(u10_u8_to_f64, f64_to_u8);
+    mean_u10_u16<u16 => u16>(u10_u16_to_f64, f64_to_u16);
+    mean_u10_u32<u16 => u32>(u10_u32_to_f64, f64_to_u32);
 
     // 12 bit functions
-    mean_u12_u8<u16 => u8>(>> 4);
-    mean_u12_u16<u16 => u16>(<< 2);
-    mean_u12_u32<u16 => u32>(<< 20);
+    mean_u12_u8<u16 => u8>(u12_u8_to_f64, f64_to_u8);
+    mean_u12_u16<u16 => u16>(u12_u16_to_f64, f64_to_u16);
+    mean_u12_u32<u16 => u32>(u12_u32_to_f64, f64_to_u32);
 
     // 16 bit functions
-    mean_u16_u8<u16 => u8>(>> 8);
-    mean_u16_u16<u16 => u16>(<< 0);
-    mean_u16_u32<u16 => u32>(<< 16);
+    mean_u16_u8<u16 => u8>(u16_u8_to_f64, f64_to_u8);
+    mean_u16_u16<u16 => u16>(u16_u16_to_f64, f64_to_u16);
+    mean_u16_u32<u16 => u32>(u16_u32_to_f64, f64_to_u32);
 
     // 32 bit functions
-    mean_u32_u8<u32 => u8>(>> 24);
-    mean_u32_u16<u32 => u16>(>> 16);
-    mean_u32_u32<u32 => u32>(<< 0);
-}
+    mean_u32_u8<u32 => u8>(u32_u8_to_f64, f64_to_u8);
+    mean_u32_u16<u32 => u16>(u32_u16_to_f64, f64_to_u16);
+    mean_u32_u32<u32 => u32>(u32_u32_to_f64, f64_to_u32);
 
-// Construction of floating point based filters
-
-// we're using u16's here instead of f16's, because rust doesn't implement a half precision float.
-
-macro_rules! mean_float {
-    ($($fname:ident<$depth_in:ty => $depth_out:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
-        $(
-            loop_frame_func! {
-                $fname<$depth_in, $depth_out>(src_frames, src_rows, i, pixel, props, multipliers) {
-                    let mut total = 0.0;
-                    let weighted = src_rows.iter()
-                        .map(|f| $depth_in_to_f64(f[i]))
-                        .enumerate()
-                        .map(|(p, f)| match props[p] {
-                            b'I' => { total += multipliers[0]; f * multipliers[0] },
-                            b'P' => { total += multipliers[1]; f * multipliers[1] },
-                            b'B' => { total += multipliers[2]; f * multipliers[2] },
-                            _ => { total += 1.0; f * 1.0 },
-                        });
-    
-                    *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
-                }
-            }
-        )*
-    };
-}
-
-#[inline]
-fn f32_to_f64(n: f32) -> f64 { n as f64 }
-
-#[inline]
-fn f64_to_f32(n: f64) -> f32 { n as f32 }
-
-#[inline]
-fn f16_to_f64(n: u16) -> f64 { f16::from_bits(n).to_f64() }
-
-#[inline]
-fn f64_to_f16(n: f64) -> u16 { f16::from_f64(n).to_bits() }
-
-mean_float! {
+    // Construction of floating point based filters
+    // we're using u16's here instead of f16's, because rust doesn't implement a half precision float.
     mean_f16_f16<u16 => u16>(f16_to_f64, f64_to_f16);
     mean_f16_f32<u16 => f32>(f16_to_f64, f64_to_f32);
     mean_f32_f16<f32 => u16>(f32_to_f64, f64_to_f16);
