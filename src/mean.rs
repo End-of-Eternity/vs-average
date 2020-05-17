@@ -35,8 +35,8 @@ macro_rules! mean_func {
 /* 
 Couple notes on this following section,
 
-Internally, we're using u64 to do the calculations, and returning the same bitdepth as we input in the first place leads to a rounding error.
-However, if we allow outputting at a higher bitdepth than we started at, then we lose (well, a significant portion) of that error.
+Internally, we're using f64 to do the calculations, and returning the same bitdepth as we input in the first place leads to a rounding error.
+However, if we allow outputting at a higher bitdepth than we started at, then we lose (well, a significant portion of) that error.
 This means we can get a high quality output, using lots of far smaller 8 bit clips, rather than lots of 16 bit clips, which are twice as large.
 
 Q: Why aren't all bit depths implemented? 
@@ -54,9 +54,9 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
-// Construction of integer based filters
-
 mean_func! {
+    // Construction of integer based filters
+
     // 8 bit functions
     mean_u8_u8<u8 => u8>(u8_u8_to_f64, f64_to_u8);
     mean_u8_u16<u8 => u16>(u8_u16_to_f64, f64_to_u16);
