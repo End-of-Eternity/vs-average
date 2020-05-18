@@ -19,8 +19,8 @@ macro_rules! mean_func {
                         .map(|f| $depth_in_to_f64(f[i]))
                         .enumerate()
                         .map(|(p, f)| match props[p] {
-                            b'I' => { total += multipliers[0]; f * multipliers[0] },
-                            b'P' => { total += multipliers[1]; f * multipliers[1] },
+                            b'I' | b'i' => { total += multipliers[0]; f * multipliers[0] },
+                            b'P' | b'p' => { total += multipliers[1]; f * multipliers[1] },
                             b'B' => { total += multipliers[2]; f * multipliers[2] },
                             _ => { total += 1.0; f * 1.0 },
                         });
