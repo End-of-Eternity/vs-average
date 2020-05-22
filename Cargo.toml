@@ -11,7 +11,7 @@ edition = "2018"
 [dependencies]
 failure = "0.1.8"
 half = "1.6.0"
-vapoursynth = "0.3.0"
+vapoursynth = { version = "0.3.0", features = ["f16-pixel-type"] }
 
 [lib]
 crate-type = ["cdylib"]

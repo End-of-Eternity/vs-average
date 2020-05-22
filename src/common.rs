@@ -101,7 +101,7 @@ pub fn f32_to_f64(n: f32) -> f64 { n as f64 }
 pub fn f64_to_f32(n: f64) -> f32 { n as f32 }
 
 #[inline]
-pub fn f16_to_f64(n: u16) -> f64 { f16::from_bits(n).to_f64() }
+pub fn f16_to_f64(n: f16) -> f64 { n.to_f64() }
 
 #[inline]
-pub fn f64_to_f16(n: f64) -> u16 { f16::from_f64(n).to_bits() }
+pub fn f64_to_f16(n: f64) -> f16 { f16::from_f64(n) }

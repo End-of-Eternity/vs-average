@@ -1,6 +1,7 @@
 // Copyright (c) EoE & Nephren 2020. All rights reserved.
 
 use failure::{Error, bail, format_err};
+use half::f16;
 use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
@@ -84,9 +85,9 @@ mean_func! {
 
     // Construction of floating point based filters
     // we're using u16's here instead of f16's, because rust doesn't implement a half precision float.
-    mean_f16_f16<u16 => u16>(f16_to_f64, f64_to_f16);
-    mean_f16_f32<u16 => f32>(f16_to_f64, f64_to_f32);
-    mean_f32_f16<f32 => u16>(f32_to_f64, f64_to_f16);
+    mean_f16_f16<f16 => f16>(f16_to_f64, f64_to_f16);
+    mean_f16_f32<f16 => f32>(f16_to_f64, f64_to_f32);
+    mean_f32_f16<f32 => f16>(f32_to_f64, f64_to_f16);
     mean_f32_f32<f32 => f32>(f32_to_f64, f64_to_f32);
 }
 
