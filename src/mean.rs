@@ -97,7 +97,7 @@ pub struct Mean<'core> {
     // output bitdepth
     pub output_depth: u8, 
     // IPB muiltiplier ratios
-    pub multipliers: Vec<f64>,
+    pub multipliers: [f64; 3],
 }
 
 impl<'core> Filter<'core> for Mean<'core> {

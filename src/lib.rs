@@ -113,9 +113,10 @@ make_filter_function! {
             },
         };
 
-        if multipliers.len() != 3 {
-            bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]")
-        }
+        let multipliers = match &multipliers[..] {
+            &[i, p, b] => [i, p, b],
+            _ => bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]"),
+        };
 
         Ok(Some(Box::new(Mean { clips, output_depth, multipliers })))
     }
