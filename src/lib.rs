@@ -106,16 +106,14 @@ make_filter_function! {
         }
 
         let multipliers = match multipliers {
-            Some(multipliers) => multipliers.collect::<Vec<_>>(),
-            _ => match preset {
-                Some(1) => vec![1.82, 1.3, 1.0], // x264 / 5
-                _ => vec![1.0, 1.0, 1.0], // balenced
+            Some(multipliers) => match &multipliers.collect::<Box<_>>()[..] {
+                &[i, p, b] => [i, p, b],
+                _ => bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]"),
             },
-        };
-
-        let multipliers = match &multipliers[..] {
-            &[i, p, b] => [i, p, b],
-            _ => bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]"),
+            _ => match preset {
+                Some(1) => [1.82, 1.3, 1.0], // x264 / 5
+                _ => [1.0, 1.0, 1.0], // balanced
+            },
         };
 
         Ok(Some(Box::new(Mean { clips, output_depth, multipliers })))
