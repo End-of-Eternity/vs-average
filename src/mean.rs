@@ -6,27 +6,33 @@ use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
 use vapoursynth::video_info::{VideoInfo, Property};
-use crate::{PLUGIN_NAME, loop_frame_func, property};
+use crate::{PLUGIN_NAME, property};
 use crate::common::*;
 
-// macro for the int based mean filter. $op and $n are for bitshifting for conversions between different bit depths (this could be done using negative bitshifts too)
-macro_rules! mean_func {
+macro_rules! mean {
     ($($fname:ident<$depth_in:ty => $depth_out:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
         $(
-            loop_frame_func! {
-                $fname<$depth_in, $depth_out>(src_frames, src_rows, i, pixel, props, multipliers) {
-                    let mut total = 0.0;
-                    let weighted = src_rows.iter()
-                        .map(|f| $depth_in_to_f64(f[i]))
-                        .enumerate()
-                        .map(|(p, f)| match props[p] {
-                            b'I' | b'i' => { total += multipliers[0]; f * multipliers[0] },
-                            b'P' | b'p' => { total += multipliers[1]; f * multipliers[1] },
-                            b'B' => { total += multipliers[2]; f * multipliers[2] },
-                            _ => { total += 1.0; f * 1.0 },
-                        });
-    
-                    *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
+            pub fn $fname(frame: &mut FrameRefMut, src_clips: &[FrameRef], multipliers: &[f64; 3]) {
+                let first_frame = &src_clips[0];
+                let props = src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
+                for plane in 0..first_frame.format().plane_count() {
+                    for row in 0..first_frame.height(plane) {
+                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth_in>(plane, row)).collect::<Vec<_>>();
+                        for (i, pixel) in frame.plane_row_mut::<$depth_out>(plane, row).iter_mut().enumerate() {
+                            let mut total = 0.0;
+                            let weighted = src_rows.iter()
+                                .map(|f| $depth_in_to_f64(f[i]))
+                                .enumerate()
+                                .map(|(p, f)| match props[p] {
+                                    b'I' | b'i' => { total += multipliers[0]; f * multipliers[0] },
+                                    b'P' | b'p' => { total += multipliers[1]; f * multipliers[1] },
+                                    b'B' => { total += multipliers[2]; f * multipliers[2] },
+                                    _ => { total += 1.0; f * 1.0 },
+                                });
+            
+                            *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
+                        }
+                    }
                 }
             }
         )*
@@ -55,7 +61,7 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
-mean_func! {
+mean! {
     // Construction of integer based filters
 
     // 8 bit functions

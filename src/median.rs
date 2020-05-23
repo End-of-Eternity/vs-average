@@ -5,54 +5,46 @@ use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
 use vapoursynth::video_info::VideoInfo;
-use crate::{PLUGIN_NAME, loop_frame_func, property};
+use crate::{PLUGIN_NAME, property};
 
-macro_rules! median_int {
+// This code looks horrible.
+// We need to fix it, Soon(TM).
+
+macro_rules! median {
     ($($fname:ident<$depth:ty>;)*) => {
         $(
-            loop_frame_func! {
-                $fname<$depth, $depth>(src_frames, src, i, pixel) {
-                    let mut values = src.iter().map(|f| f[i]).collect::<Vec<_>>();
-                    values.sort_unstable();
-    
-                    let median = if values.len() & 1 == 1 {
-                        // odd length
-                        values[(values.len() - 1) / 2]
-                    } else {
-                        // even length
-                        let middle = values.len() / 2;
-                        (values[middle - 1] + values[middle]) / 2
-                    };
-    
-                    *pixel = median;
+            pub fn $fname(frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
+                let first_frame = &src_clips[0];
+                for plane in 0..first_frame.format().plane_count() {
+                    for row in 0..first_frame.height(plane) {
+                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
+                        for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
+                            let mut values = src_rows.iter().map(|f| f[i]).collect::<Vec<_>>();
+                            values.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+            
+                            let median = if values.len() & 1 == 1 {
+                                // odd length
+                                values[(values.len() - 1) / 2]
+                            } else {
+                                // even length
+                                let middle = values.len() / 2;
+                                (values[middle - 1] + values[middle]) / 2 as $depth
+                            };
+            
+                            *pixel = median;
+                        }
+                    }
                 }
             }
         )*
     };
 }
 
-median_int! {
+median! {
     median_u8<u8>;
     median_u16<u16>;
     median_u32<u32>;
-}
-
-loop_frame_func! {
-    median_float<f32, f32>(src_frames, src, i, pixel) {
-        let mut values = src.iter().map(|f| f[i]).collect::<Vec<_>>();
-        values.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
-        
-        let median = if values.len() & 1 == 1 {
-            // odd length
-            values[(values.len() - 1) / 2]
-        } else {
-            // even length
-            let middle = values.len() / 2;
-            (values[middle - 1] + values[middle]) / 2.0
-        };
-        
-        *pixel = median;
-    }
+    median_f32<f32>;
 }
 
 pub struct Median<'core> {
@@ -103,7 +95,7 @@ impl<'core> Filter<'core> for Median<'core> {
                     _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, depth),
                 }
             },
-            SampleType::Float => median_float(&mut frame, &src_frames),
+            SampleType::Float => median_f32(&mut frame, &src_frames),
         }
 
         Ok(frame.into())

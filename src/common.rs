@@ -4,44 +4,6 @@
 
 use half::f16;
 
-#[macro_export]
-macro_rules! loop_frame_func {
-
-    // prop / multiplier macros
-
-    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident, $props:ident, $multipliers:ident) $func:block) => {
-        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64; 3]) {
-            let first_frame = &$src_clips[0];
-            let $props = $src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
-            for plane in 0..first_frame.format().plane_count() {
-                for row in 0..first_frame.height(plane) {
-                    let $src_rows = $src_clips.iter().map(|f| f.plane_row::<$bits_per_sample_in>(plane, row)).collect::<Vec<_>>();
-                    for ($i, $pixel) in frame.plane_row_mut::<$bits_per_sample_out>(plane, row).iter_mut().enumerate() {
-                        $func
-                    }
-                }
-            }
-        }
-    };
-
-    // ==============================================================
-    // non prop / multiplier macros
-
-    ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident) $func:block) => {
-        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef]) {
-            let first_frame = &$src_clips[0];
-            for plane in 0..first_frame.format().plane_count() {
-                for row in 0..first_frame.height(plane) {
-                    let $src_rows = $src_clips.iter().map(|f| f.plane_row::<$bits_per_sample_in>(plane, row)).collect::<Vec<_>>();
-                    for ($i, $pixel) in frame.plane_row_mut::<$bits_per_sample_out>(plane, row).iter_mut().enumerate() {
-                        $func
-                    }
-                }
-            }
-        }
-    };
-}
-
 // Conversion functions to and from f64
 
 macro_rules! int_to_f64 {
