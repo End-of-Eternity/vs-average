@@ -10,27 +10,30 @@ use crate::{PLUGIN_NAME, property};
 use crate::common::*;
 
 macro_rules! mean {
-    ($($fname:ident<$depth:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
+    ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
         $(
-            pub fn $fname(&self, frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
-                let first_frame = &src_clips[0];
-                let props = src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
-                for plane in 0..first_frame.format().plane_count() {
-                    for row in 0..first_frame.height(plane) {
-                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
-                        for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
-                            let mut total = 0.0;
-                            let weighted = src_rows.iter()
-                                .map(|f| $depth_in_to_f64(f[i]))
-                                .enumerate()
-                                .map(|(p, f)| match props[p] {
-                                    b'I' | b'i' => { total += self.multipliers[0]; f * self.multipliers[0] },
-                                    b'P' | b'p' => { total += self.multipliers[1]; f * self.multipliers[1] },
-                                    b'B' => { total += self.multipliers[2]; f * self.multipliers[2] },
-                                    _ => { total += 1.0; f * 1.0 },
-                                });
-            
-                            *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
+            pub fn $fname(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+                // `out_frame` has the same format as the source clips.
+                let format = out_frame.format();
+                let weights = src_frames.iter()
+                    .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
+                    .map(|p| match p {
+                        b'I' | b'i' => self.multipliers[0],
+                        b'P' | b'p' => self.multipliers[1],
+                        b'B' => self.multipliers[2],
+                        _ => 1.0,
+                    })
+                    .collect::<Vec<_>>();
+        
+                let multiplier = 1.0 / weights.iter().sum::<f64>();
+        
+                for plane in 0..format.plane_count() {
+                    for row in 0..format.plane_count() {
+                        let src_rows = src_frames.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
+                        let out_row = out_frame.plane_row_mut::<$depth>(plane, row);
+                        for ((out_pixel, src_pixels), &weight) in out_row.iter_mut().zip(src_rows.iter()).zip(weights.iter()) {
+                            let weighted_sum = src_pixels.iter().map(|&p| $depth_to_f64(p) * weight).sum::<f64>();
+                            unsafe { std::ptr::write(out_pixel, $f64_to_depth(weighted_sum * multiplier)); }
                         }
                     }
                 }
