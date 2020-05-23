@@ -1,36 +1,45 @@
 // Copyright (c) EoE & Nephren 2020. All rights reserved.
 
-use failure::{Error, bail, format_err};
+use crate::common::*;
+use crate::{property, PLUGIN_NAME};
+use failure::{bail, format_err, Error};
 use half::f16;
-use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
+use vapoursynth::prelude::*;
 use vapoursynth::video_info::VideoInfo;
-use crate::{PLUGIN_NAME, property};
-use crate::common::*;
 
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
         $(
             pub fn $fname(&self, frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
+                let weights: Vec<_> = src_clips
+                    .iter()
+                    .map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0])
+                    .map(|p| match p {
+                        b'I' | b'i' => { self.multipliers[0] },
+                        b'P' | b'p' => { self.multipliers[1] },
+                        b'B' => { self.multipliers[2] },
+                        _ => { 1.0 },
+                    })
+                    .collect();
+                // we do the division once outside of the loop so we only need multiplication in the inner loop
+                let multiplier = 1.0 / weights.iter().sum::<f64>();
                 let first_frame = &src_clips[0];
-                let props = src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
                 for plane in 0..first_frame.format().plane_count() {
                     for row in 0..first_frame.height(plane) {
-                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
+                        let src_rows: Vec<_> = src_clips
+                            .iter()
+                            .map(|f| f.plane_row::<$depth>(plane, row))
+                            .collect();
                         for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
-                            let mut total = 0.0;
-                            let weighted = src_rows.iter()
+                            let weighted_sum: f64 = src_rows
+                                .iter()
                                 .map(|f| $depth_in_to_f64(f[i]))
-                                .enumerate()
-                                .map(|(p, f)| match props[p] {
-                                    b'I' | b'i' => { total += self.multipliers[0]; f * self.multipliers[0] },
-                                    b'P' | b'p' => { total += self.multipliers[1]; f * self.multipliers[1] },
-                                    b'B' => { total += self.multipliers[2]; f * self.multipliers[2] },
-                                    _ => { total += 1.0; f * 1.0 },
-                                });
-            
-                            *pixel = $f64_to_depth_out(weighted.sum::<f64>() / total);
+                                .zip(weights.iter())
+                                .map(|(p, w)| p * w)
+                                .sum();
+                            unsafe { std::ptr::write(pixel, $f64_to_depth_out(weighted_sum * multiplier)) }
                         }
                     }
                 }
@@ -39,14 +48,14 @@ macro_rules! mean {
     };
 }
 
-/* 
+/*
 Couple notes on this following section,
 
 Internally, we're using f64 to do the calculations, and returning the same bitdepth as we input in the first place leads to a rounding error.
 However, if we allow outputting at a higher bitdepth than we started at, then we lose (well, a significant portion of) that error.
 This means we can get a high quality output, using lots of far smaller 8 bit clips, rather than lots of 16 bit clips, which are twice as large.
 
-Q: Why aren't all bit depths implemented? 
+Q: Why aren't all bit depths implemented?
 A: A) it'd be long, and bloat the plugin more, + b) who uses 9 bit clips anyway?
 
 Q: In that case, why did you bother to implement 10 and 12 bit?
@@ -75,7 +84,7 @@ impl<'core> Mean<'core> {
         mean_u12<u16>(u12_to_f64, f64_to_u16);
         mean_u16<u16>(u16_to_f64, f64_to_u16);
         mean_u32<u32>(u32_to_f64, f64_to_u32);
-    
+
         mean_f16<f16>(f16_to_f64, f64_to_f16);
         mean_f32<f32>(f32_to_f64, f64_to_f32);
     }
@@ -94,7 +103,9 @@ impl<'core> Filter<'core> for Mean<'core> {
         n: usize,
     ) -> Result<Option<FrameRef<'core>>, Error> {
         // request frame filters fro all clips
-        self.clips.iter().for_each(|f| f.request_frame_filter(context, n));
+        self.clips
+            .iter()
+            .for_each(|f| f.request_frame_filter(context, n));
         Ok(None)
     }
 
@@ -111,8 +122,13 @@ impl<'core> Filter<'core> for Mean<'core> {
 
         // construct our output frame
         let mut frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
-        let src_frames = self.clips.iter()
-            .map(|f| f.get_frame_filter(context, n).ok_or_else(|| format_err!("Could not retrieve source frame")))
+        let src_frames = self
+            .clips
+            .iter()
+            .map(|f| {
+                f.get_frame_filter(context, n)
+                    .ok_or_else(|| format_err!("Could not retrieve source frame"))
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         // this is the frame of the first source, not the first frame of the clip. Bad naming, blame Nephren
@@ -124,7 +140,7 @@ impl<'core> Filter<'core> for Mean<'core> {
                 let input_depth = property!(info.format).bits_per_sample();
                 // match input and output depths to correct functions
                 match input_depth {
-                    8  => self.mean_u8 (&mut frame, &src_frames),
+                    8 => self.mean_u8(&mut frame, &src_frames),
                     10 => self.mean_u10(&mut frame, &src_frames),
                     12 => self.mean_u12(&mut frame, &src_frames),
                     16 => self.mean_u16(&mut frame, &src_frames),
@@ -132,7 +148,7 @@ impl<'core> Filter<'core> for Mean<'core> {
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
-            },
+            }
             SampleType::Float => {
                 let input_depth = property!(info.format).bits_per_sample();
                 match input_depth {
@@ -141,11 +157,10 @@ impl<'core> Filter<'core> for Mean<'core> {
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
-            },
+            }
         }
 
         // return our resulting frame
         Ok(frame.into())
     }
 }
-
