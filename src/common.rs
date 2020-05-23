@@ -26,27 +26,9 @@ macro_rules! f64_to_int {
 
 int_to_f64! {
     u8_u8_to_f64<u8>(<< 0);
-    u8_u16_to_f64<u8>(<< 8);
-    u8_u32_to_f64<u8>(<< 24);
-
-    // 10 bit functions
-    u10_u8_to_f64<u16>(>> 2);
     u10_u16_to_f64<u16>(<< 4);
-    u10_u32_to_f64<u16>(<< 22);
-
-    // 12 bit functions
-    u12_u8_to_f64<u16>(>> 4);
     u12_u16_to_f64<u16>(<< 2);
-    u12_u32_to_f64<u16>(<< 20);
-
-    // 16 bit functions
-    u16_u8_to_f64<u16>(>> 8);
     u16_u16_to_f64<u16>(<< 0);
-    u16_u32_to_f64<u16>(<< 16);
-
-    // 32 bit functions
-    u32_u8_to_f64<u32>(>> 24);
-    u32_u16_to_f64<u32>(>> 16);
     u32_u32_to_f64<u32>(<< 0);
 }
 

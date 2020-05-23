@@ -74,7 +74,6 @@ make_filter_function! {
         _api: API,
         _core: CoreRef<'core>,
         clips: ValueIter<'_, 'core, Node<'core>>,
-        output_depth: Option<i64>,
         preset: Option<i64>,
         multipliers: Option<ValueIter<'_, 'core, f64>>
     ) -> Result<Option<Box<dyn Filter<'core> + 'core>>, Error> {
@@ -84,25 +83,6 @@ make_filter_function! {
         let input_depth = property!(clips[0].info().format).bits_per_sample();
         if input_depth != 8 && input_depth != 10 && input_depth != 12 && input_depth != 16 && input_depth != 32 {
             bail!("Input depth can only be 8, 10, 12, 16 or 32")
-        }
-
-        let output_depth = match output_depth {
-            Some(depth) if depth == 8 || depth == 16 || depth == 32 =>
-                depth as u8,
-            None => {
-                match property!(clips[0].info().format).bits_per_sample() {
-                    8 | 16 | 32 => property!(clips[0].info().format).bits_per_sample(),
-                    10 | 12 => 16,
-                    _ => bail!("Couldn't automatically set output depth. This shouldn't be able to happen.")
-                }
-            }
-            _ => bail!("Output depth can only be 8, 16 and 32"),
-        };
-        
-        match property!(clips[0].info().format).sample_type() {
-            SampleType::Float if output_depth != 16 && output_depth != 32 => 
-                bail!("Output depth can only be 16 or 32 for float sample types"),
-            _ => (),
         }
 
         let multipliers = match multipliers {
@@ -116,7 +96,7 @@ make_filter_function! {
             },
         };
 
-        Ok(Some(Box::new(Mean { clips, output_depth, multipliers })))
+        Ok(Some(Box::new(Mean { clips, multipliers })))
     }
 }
 

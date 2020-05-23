@@ -5,20 +5,20 @@ use half::f16;
 use vapoursynth::prelude::*;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
-use vapoursynth::video_info::{VideoInfo, Property};
+use vapoursynth::video_info::VideoInfo;
 use crate::{PLUGIN_NAME, property};
 use crate::common::*;
 
 macro_rules! mean {
-    ($($fname:ident<$depth_in:ty => $depth_out:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
+    ($($fname:ident<$depth:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
         $(
             pub fn $fname(frame: &mut FrameRefMut, src_clips: &[FrameRef], multipliers: &[f64; 3]) {
                 let first_frame = &src_clips[0];
                 let props = src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
                 for plane in 0..first_frame.format().plane_count() {
                     for row in 0..first_frame.height(plane) {
-                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth_in>(plane, row)).collect::<Vec<_>>();
-                        for (i, pixel) in frame.plane_row_mut::<$depth_out>(plane, row).iter_mut().enumerate() {
+                        let src_rows = src_clips.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
+                        for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
                             let mut total = 0.0;
                             let weighted = src_rows.iter()
                                 .map(|f| $depth_in_to_f64(f[i]))
@@ -62,66 +62,26 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
 */
 
 mean! {
-    // Construction of integer based filters
+    mean_u8<u8>(u8_u8_to_f64, f64_to_u8);
+    mean_u10<u16>(u10_u16_to_f64, f64_to_u16);
+    mean_u12<u16>(u12_u16_to_f64, f64_to_u16);
+    mean_u16<u16>(u16_u16_to_f64, f64_to_u16);
+    mean_u32<u32>(u32_u32_to_f64, f64_to_u32);
 
-    // 8 bit functions
-    mean_u8_u8<u8 => u8>(u8_u8_to_f64, f64_to_u8);
-    mean_u8_u16<u8 => u16>(u8_u16_to_f64, f64_to_u16);
-    mean_u8_u32<u8 => u32>(u8_u32_to_f64, f64_to_u32);
-
-    // 10 bit functions
-    mean_u10_u8<u16 => u8>(u10_u8_to_f64, f64_to_u8);
-    mean_u10_u16<u16 => u16>(u10_u16_to_f64, f64_to_u16);
-    mean_u10_u32<u16 => u32>(u10_u32_to_f64, f64_to_u32);
-
-    // 12 bit functions
-    mean_u12_u8<u16 => u8>(u12_u8_to_f64, f64_to_u8);
-    mean_u12_u16<u16 => u16>(u12_u16_to_f64, f64_to_u16);
-    mean_u12_u32<u16 => u32>(u12_u32_to_f64, f64_to_u32);
-
-    // 16 bit functions
-    mean_u16_u8<u16 => u8>(u16_u8_to_f64, f64_to_u8);
-    mean_u16_u16<u16 => u16>(u16_u16_to_f64, f64_to_u16);
-    mean_u16_u32<u16 => u32>(u16_u32_to_f64, f64_to_u32);
-
-    // 32 bit functions
-    mean_u32_u8<u32 => u8>(u32_u8_to_f64, f64_to_u8);
-    mean_u32_u16<u32 => u16>(u32_u16_to_f64, f64_to_u16);
-    mean_u32_u32<u32 => u32>(u32_u32_to_f64, f64_to_u32);
-
-    // Construction of floating point based filters
-    // we're using u16's here instead of f16's, because rust doesn't implement a half precision float.
-    mean_f16_f16<f16 => f16>(f16_to_f64, f64_to_f16);
-    mean_f16_f32<f16 => f32>(f16_to_f64, f64_to_f32);
-    mean_f32_f16<f32 => f16>(f32_to_f64, f64_to_f16);
-    mean_f32_f32<f32 => f32>(f32_to_f64, f64_to_f32);
+    mean_f16<f16>(f16_to_f64, f64_to_f16);
+    mean_f32<f32>(f32_to_f64, f64_to_f32);
 }
 
 pub struct Mean<'core> {
     // vector of our input clips
     pub clips: Vec<Node<'core>>,
-    // output bitdepth
-    pub output_depth: u8, 
     // IPB muiltiplier ratios
     pub multipliers: [f64; 3],
 }
 
 impl<'core> Filter<'core> for Mean<'core> {
-    fn video_info(&self, _: API, core: CoreRef<'core>) -> Vec<VideoInfo<'core>> {
-        // Only change between the input and the output is the format, which is constructed below
-        let VideoInfo { format, framerate, resolution, num_frames, flags } = self.clips[0].info();
-        
-        // register the format for the output --> this needs to be done in case the output format doesn't yet exists
-        let format_in = property!(format);
-        let format_out = core.register_format(
-            format_in.color_family(), 
-            format_in.sample_type(), 
-            self.output_depth, 
-            format_in.sub_sampling_w(), 
-            format_in.sub_sampling_h(),
-        ).unwrap(); // safe to unwrap since inputs were sanity checked in lib.rs
-
-        vec![VideoInfo { format: Property::Constant(format_out), framerate, resolution, num_frames, flags }]
+    fn video_info(&self, _: API, _: CoreRef<'core>) -> Vec<VideoInfo<'core>> {
+        vec![self.clips[0].info()]
     }
 
     fn get_frame_initial(
@@ -147,17 +107,8 @@ impl<'core> Filter<'core> for Mean<'core> {
         let format = property!(info.format);
         let resolution = property!(info.resolution);
 
-        // register the format for the output --> this will now exist, but this is the easist way to get the Format back anyway.
-        let format_out = core.register_format(
-            format.color_family(), 
-            format.sample_type(), 
-            self.output_depth, 
-            format.sub_sampling_w(), 
-            format.sub_sampling_h(),
-        ).unwrap();
-
         // construct our output frame
-        let mut frame = unsafe { FrameRefMut::new_uninitialized(core, None, format_out, resolution) };
+        let mut frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
         let src_frames = self.clips.iter()
             .map(|f| f.get_frame_filter(context, n).ok_or_else(|| format_err!("Could not retrieve source frame")))
             .collect::<Result<Vec<_>, _>>()?;
@@ -170,41 +121,23 @@ impl<'core> Filter<'core> for Mean<'core> {
             SampleType::Integer => {
                 let input_depth = property!(info.format).bits_per_sample();
                 // match input and output depths to correct functions
-                match (input_depth, self.output_depth) {
-                    (8, 8)  =>  mean_u8_u8   (&mut frame, &src_frames, &self.multipliers),
-                    (8, 16) =>  mean_u8_u16  (&mut frame, &src_frames, &self.multipliers),
-                    (8, 32) =>  mean_u8_u32  (&mut frame, &src_frames, &self.multipliers),
-                    
-                    (10, 8)  => mean_u10_u8  (&mut frame, &src_frames, &self.multipliers),
-                    (10, 16) => mean_u10_u16 (&mut frame, &src_frames, &self.multipliers),
-                    (10, 32) => mean_u10_u32 (&mut frame, &src_frames, &self.multipliers),
-
-                    (12, 8)  => mean_u12_u8  (&mut frame, &src_frames, &self.multipliers),
-                    (12, 16) => mean_u12_u16 (&mut frame, &src_frames, &self.multipliers),
-                    (12, 32) => mean_u12_u32 (&mut frame, &src_frames, &self.multipliers),
-
-                    (16, 8)  => mean_u16_u8  (&mut frame, &src_frames, &self.multipliers),
-                    (16, 16) => mean_u16_u16 (&mut frame, &src_frames, &self.multipliers),
-                    (16, 32) => mean_u16_u32 (&mut frame, &src_frames, &self.multipliers),
-
-
-                    (32, 8)  => mean_u32_u8  (&mut frame, &src_frames, &self.multipliers),
-                    (32, 16) => mean_u32_u16 (&mut frame, &src_frames, &self.multipliers),
-                    (32, 32) => mean_u32_u32 (&mut frame, &src_frames, &self.multipliers),
+                match input_depth {
+                    8  => mean_u8 (&mut frame, &src_frames, &self.multipliers),
+                    10 => mean_u10(&mut frame, &src_frames, &self.multipliers),
+                    12 => mean_u12(&mut frame, &src_frames, &self.multipliers),
+                    16 => mean_u16(&mut frame, &src_frames, &self.multipliers),
+                    32 => mean_u32(&mut frame, &src_frames, &self.multipliers),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
-                    _ => bail!("{}: input depth {} not supported with output depth {}", PLUGIN_NAME, input_depth, self.output_depth),
+                    _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
             },
             SampleType::Float => {
                 let input_depth = property!(info.format).bits_per_sample();
-                match (input_depth, self.output_depth) {
-                    (16, 16) => mean_f16_f16(&mut frame, &src_frames, &self.multipliers),
-                    (16, 32) => mean_f16_f32(&mut frame, &src_frames, &self.multipliers),
-                    
-                    (32, 16) => mean_f32_f16(&mut frame, &src_frames, &self.multipliers),
-                    (32, 32) => mean_f32_f32(&mut frame, &src_frames, &self.multipliers),
+                match input_depth {
+                    16 => mean_f16(&mut frame, &src_frames, &self.multipliers),
+                    32 => mean_f32(&mut frame, &src_frames, &self.multipliers),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
-                    _ => bail!("{}: input depth {} not supported with output depth {}", PLUGIN_NAME, input_depth, self.output_depth),
+                    _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
             },
         }
