@@ -10,7 +10,7 @@ macro_rules! loop_frame_func {
     // prop / multiplier macros
 
     ($name:ident<$bits_per_sample_in:ty, $bits_per_sample_out:ty>($src_clips:ident, $src_rows:ident, $i:ident, $pixel:ident, $props:ident, $multipliers:ident) $func:block) => {
-        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64]) {
+        pub fn $name(frame: &mut FrameRefMut, $src_clips: &[FrameRef], $multipliers: &[f64; 3]) {
             let first_frame = &$src_clips[0];
             let $props = $src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
             for plane in 0..first_frame.format().plane_count() {
