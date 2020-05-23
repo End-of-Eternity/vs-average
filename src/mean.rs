@@ -12,30 +12,6 @@ use vapoursynth::video_info::VideoInfo;
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
         $(
-<<<<<<< HEAD
-            pub fn $fname(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
-                // `out_frame` has the same format as the source clips.
-                let format = out_frame.format();
-                let weights = src_frames.iter()
-                    .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
-                    .map(|p| match p {
-                        b'I' | b'i' => self.multipliers[0],
-                        b'P' | b'p' => self.multipliers[1],
-                        b'B' => self.multipliers[2],
-                        _ => 1.0,
-                    })
-                    .collect::<Vec<_>>();
-        
-                let multiplier = 1.0 / weights.iter().sum::<f64>();
-        
-                for plane in 0..format.plane_count() {
-                    for row in 0..format.plane_count() {
-                        let src_rows = src_frames.iter().map(|f| f.plane_row::<$depth>(plane, row)).collect::<Vec<_>>();
-                        let out_row = out_frame.plane_row_mut::<$depth>(plane, row);
-                        for ((out_pixel, src_pixels), &weight) in out_row.iter_mut().zip(src_rows.iter()).zip(weights.iter()) {
-                            let weighted_sum = src_pixels.iter().map(|&p| $depth_to_f64(p) * weight).sum::<f64>();
-                            unsafe { std::ptr::write(out_pixel, $f64_to_depth(weighted_sum * multiplier)); }
-=======
             pub fn $fname(&self, frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
                 let weights: Vec<_> = src_clips
                     .iter()
@@ -59,12 +35,11 @@ macro_rules! mean {
                         for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
                             let weighted_sum: f64 = src_rows
                                 .iter()
-                                .map(|f| $depth_in_to_f64(f[i]))
+                                .map(|f| $depth_to_f64(f[i]))
                                 .zip(weights.iter())
                                 .map(|(p, w)| p * w)
                                 .sum();
-                            unsafe { std::ptr::write(pixel, $f64_to_depth_out(weighted_sum * multiplier)) }
->>>>>>> 2415fad61e2d332a80706d104af967afeaa565b7
+                            unsafe { std::ptr::write(pixel, $f64_to_depth(weighted_sum * multiplier)) }
                         }
                     }
                 }
