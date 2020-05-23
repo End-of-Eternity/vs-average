@@ -12,7 +12,7 @@ use crate::common::*;
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_in_to_f64:path, $f64_to_depth_out:path);)*) => {
         $(
-            pub fn $fname(frame: &mut FrameRefMut, src_clips: &[FrameRef], multipliers: &[f64; 3]) {
+            pub fn $fname(&self, frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
                 let first_frame = &src_clips[0];
                 let props = src_clips.iter().map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0]).collect::<Vec<_>>(); 
                 for plane in 0..first_frame.format().plane_count() {
@@ -24,9 +24,9 @@ macro_rules! mean {
                                 .map(|f| $depth_in_to_f64(f[i]))
                                 .enumerate()
                                 .map(|(p, f)| match props[p] {
-                                    b'I' | b'i' => { total += multipliers[0]; f * multipliers[0] },
-                                    b'P' | b'p' => { total += multipliers[1]; f * multipliers[1] },
-                                    b'B' => { total += multipliers[2]; f * multipliers[2] },
+                                    b'I' | b'i' => { total += self.multipliers[0]; f * self.multipliers[0] },
+                                    b'P' | b'p' => { total += self.multipliers[1]; f * self.multipliers[1] },
+                                    b'B' => { total += self.multipliers[2]; f * self.multipliers[2] },
                                     _ => { total += 1.0; f * 1.0 },
                                 });
             
@@ -61,22 +61,24 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
-mean! {
-    mean_u8<u8>(u8_u8_to_f64, f64_to_u8);
-    mean_u10<u16>(u10_u16_to_f64, f64_to_u16);
-    mean_u12<u16>(u12_u16_to_f64, f64_to_u16);
-    mean_u16<u16>(u16_u16_to_f64, f64_to_u16);
-    mean_u32<u32>(u32_u32_to_f64, f64_to_u32);
-
-    mean_f16<f16>(f16_to_f64, f64_to_f16);
-    mean_f32<f32>(f32_to_f64, f64_to_f32);
-}
-
 pub struct Mean<'core> {
     // vector of our input clips
     pub clips: Vec<Node<'core>>,
     // IPB muiltiplier ratios
     pub multipliers: [f64; 3],
+}
+
+impl<'core> Mean<'core> {
+    mean! {
+        mean_u8<u8>(u8_to_f64, f64_to_u8);
+        mean_u10<u16>(u10_to_f64, f64_to_u16);
+        mean_u12<u16>(u12_to_f64, f64_to_u16);
+        mean_u16<u16>(u16_to_f64, f64_to_u16);
+        mean_u32<u32>(u32_to_f64, f64_to_u32);
+    
+        mean_f16<f16>(f16_to_f64, f64_to_f16);
+        mean_f32<f32>(f32_to_f64, f64_to_f32);
+    }
 }
 
 impl<'core> Filter<'core> for Mean<'core> {
@@ -122,11 +124,11 @@ impl<'core> Filter<'core> for Mean<'core> {
                 let input_depth = property!(info.format).bits_per_sample();
                 // match input and output depths to correct functions
                 match input_depth {
-                    8  => mean_u8 (&mut frame, &src_frames, &self.multipliers),
-                    10 => mean_u10(&mut frame, &src_frames, &self.multipliers),
-                    12 => mean_u12(&mut frame, &src_frames, &self.multipliers),
-                    16 => mean_u16(&mut frame, &src_frames, &self.multipliers),
-                    32 => mean_u32(&mut frame, &src_frames, &self.multipliers),
+                    8  => self.mean_u8 (&mut frame, &src_frames),
+                    10 => self.mean_u10(&mut frame, &src_frames),
+                    12 => self.mean_u12(&mut frame, &src_frames),
+                    16 => self.mean_u16(&mut frame, &src_frames),
+                    32 => self.mean_u32(&mut frame, &src_frames),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
@@ -134,8 +136,8 @@ impl<'core> Filter<'core> for Mean<'core> {
             SampleType::Float => {
                 let input_depth = property!(info.format).bits_per_sample();
                 match input_depth {
-                    16 => mean_f16(&mut frame, &src_frames, &self.multipliers),
-                    32 => mean_f32(&mut frame, &src_frames, &self.multipliers),
+                    16 => self.mean_f16(&mut frame, &src_frames),
+                    32 => self.mean_f32(&mut frame, &src_frames),
                     // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
                     _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
                 }
