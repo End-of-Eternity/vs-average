@@ -12,46 +12,50 @@ vs-average is a VapourSynth plugin for averaging multiple clips together. The ge
 ## Supported Formats
 
 Sample Type & Bits Per Sample: 
- - Mean: 8, 10, 12, 16 and 32 bit integer, 16 and 32 bit float.
+ - Mean: All supported by VapourSynth
  - Median: All integer formats (8..32), only 32 bit float. (f16 will be added in a later commit)
 
 Color Family: Gray, RGB, YUV or YCoCg.
 
-Sub-Sampling: any.
+Sub-Sampling: Any.
 
 Note that the input format must be the same for all inputted clips.
 
 ## Usage
 
-### Mean
-
-Mean will set the output pixel to the average (or mean) of the input pixels from each clip.
+Whilst both `average.Mean` and `average.Median` will accept a wide range of input formats, it is suggested to input a higher precision than your source to negate rounding errors. For example, given some 8 bit source files, you should increase their precision using something akin to the following:
 
 ```python
-average.Mean(clip[] clips[, int output_depth=clips[0].format.bits_per_sample], int preset, float[] multipliers)
+# some 8 bit source clips
+clips = [clip_a, clip_b, clip_c]
+# increase precision to 16 bits
+clips = [core.fmtc.bitdepth(clip, bits=16) for clip in clips]
+# get back a higher precision 16 bit clip
+mean = core.average.Mean(clips)
+```
+
+### Mean
+
+Mean will set the output pixel to the average (or mean) of the input pixels from each clip. Returns a clip of the same format as the inputs.
+
+```python
+average.Mean(clip[] clips[, int preset])
 ```
 
 - clips:<br />
     List of clips to be processed. Must be the of the same format, length, fps, ect.
-
-- output_depth:<br />
-    Bitdepth of the output. Will default to the same as `clips[0]`.<br />
-    Only 8, 16 or 32 bit is supported.<br />
-    Since all calculations are done interally as f64s, it's far more efficient to input your sources as 8 bit, and return as 16 bit with the increased precision. In the case that you want to directly output the clip returned by `Mean`, I'd suggest you return a 16 bit clip, and dither down using `resize.Point` or similar, even for 16 -> 8 bit, due to an internal rounding error. Significant improvements can be observed over returning a higher bitdepth clip, and dithering down, than a lower bitdepth clip. For this same reason, returning a 10 or 12 bit clip is not supported (And also because I'm lazy). For more information, see the comments in `mean.rs`.
   
 - preset:<br />
-    Integer based preset value for per frame type weightings. See below for how this works. Currently only one preset is implemented. Any other inputs than the ones stated below (or none) will be interpreted as `multipliers=[0, 0, 0]` (no weighting).
+    Integer based preset value for per frame type weightings. See below for how this works. Any other inputs than the ones stated below (or none) will be interpreted as `multipliers=[0, 0, 0]` (no weighting).
     
-    1. Reverse (default) x264/5 based ip/pb qp offset ratios. (`--ipratio 1.4 --pbratio 1.3`). Works for other encoders/ratios as well (though may be less effective)<br />
-     _Equivalent to `multipliers=[1.82, 1.3, 1.0]`_
-
-- multipliers:<br />
-    I, P and B frame multipliers, for per frame weighting. Useful for when you want `average.Mean` to favour I frames. Can be used to (simply) reverse higher b and p frame quantization. As an example, if you only wanted I and P frames to be selected for averaging, you could use `multipliers=[1, 1, 0]`. Differences with larger amounts of clips when using `preset=1` are negligable, but do exist, so it might be worth leaving on. It may also be worth increasing the I and P frame multipliers by a small amount from `preset=1`, especially if fast motion interpolation algorithms were used on sources, thereby further decreasing the quality of P and B frames.
+    1. Reverse (default) x264/5 based IP/PB qp offset ratios. (`--ipratio 1.4 --pbratio 1.3`). Works for other encoders/ratios as well (though may be less effective)<br />
+    2. Reverse x264 `--tune grain` offset ratios (`--ipratio 1.1 --pbratio 1.1`)
+    3. Reverse x265 `--tune grain` offset ratios (`--ipratio 1.1 --pbratio 1.0`)
 
 
 ### Median
 
-Median will set the output pixel to the Median (middle value of the sorted data) of the input pixels from each clip.
+Median will set the output pixel to the Median (middle value of the sorted data) of the input pixels from each clip. Returns a clip of the same format as the inputs.
 
 ```python
 average.Median(clip[] clips])
@@ -60,16 +64,14 @@ average.Median(clip[] clips])
 - clips:<br />
     List of clips to be processed. Must be the of the same format, length, fps, ect.
 
-Note that since `Median` does not define an `output_depth` parameter, any input of an even number of clips (where the average of the middle two valeus is taken to be the mean) will likely induce another (though smaller) rounding error. I'll fix this at some point too.
-
 ## Examples
 
-- Take the Mean of 3, 8 bit input clips, and output as 16 bit.
+- Take the Mean of 3 input clips, encoded using the x264 `--tune grain` preset
 
 ```python
 clips = [clip_a, clip_b, clip_c]
 
-mean = core.average.Mean(clips, output_depth=16)
+mean = core.average.Mean(clips, preset=2)
 ```
 
 - Take the Median of 3 clips.
@@ -86,10 +88,10 @@ mean = core.average.Median(clips)
 # add an extra frame to the start of our clip so it's one frame behind
 slow_clip = clip[0] + clip
 # drop the first frame of our clip so it's one frame ahead
-fast_clip = clip[1:]
+fast_clip = clip[1:] + clip[-1]
 
 # average our slow, original, and fast clips together to get a temporal blur.
-temporal_blur = core.average.Mean([slow_clip, clip, fast_clip], output_depth=16)
+temporal_blur = core.average.Mean([slow_clip, clip, fast_clip])
 ```
 
 ## Compilation
@@ -101,12 +103,12 @@ cargo build --release
 ## FAQ
 
  - _Q: Why did you implement support for 16 bit floats?_ <br />
-   A: Mainly because if the end user wanted to work in floats, and had 8 bit sources, f16s are far smaller in memory usage, and are implemented on all not-under-a-rock CPUs since the cavemen were around circa 2009. Further processing can be done in 32 bit. For more information, see `mean.rs` or contact me on Discord (See below).
+   A: Why not?
 
 - _Q: How fast is `vs-average`?_ <br />
-   A: Pretty fast, `vs-average` implements multithreading in the default build, allowing for a huge throughput. In fact, the main bottlenecks I've noticed is drive latency (Observed up to ~100MiB/s sustained random reads), and decode speed (decoding 11 AVC bitstreams isn't easy). For fastest speeds with multiple clips, I'd suggest using something akin to [dgdecodenv](http://rationalqm.us/dgdecnv/dgdecnv.html) for decoding acceleration via CUDA, and all source files on one (or multiple) SSDs.
+   A: For the current release (v0.3.0), I have had no noticable speed losses using `average.Mean` vs doing nothing at all to some clips in both generated clips by `std.BlankClip`, and decoded clips from `lsmas.LWLibavSource`. It should be noted however that if you did intend to use a significant number of file based source, that you should use an SSD which can handle heavy random reads, and either a CPU which can handle decoding multiple streams, or a GPU based decoder such as [dgdecodenv](http://rationalqm.us/dgdecnv/dgdecnv.html).
 
-   Note that all my tests have been performed using `lsmas.LWLibavSource` to index and decode souce files, on an R9 3900x with 32GiB of ram.
+   As of now, `average.Median` is still fairly badly implemented, and it's nowhere near as fast as `average.Mean`, however fixing it up is next on the agenda.
 
  - _Q: Do you plan to write more useless plugins?_ <br />
    A: Yup, rust is pretty cool, [vapoursynth-rs](https://github.com/YaLTeR/vapoursynth-rs) is brilliant, and I'm full of dumb ideas :^)
@@ -117,3 +119,5 @@ cargo build --release
     - Discord: `End of Eternity#6292`
  - Nephren
     - Discord: `Rin-go#8647`
+ - Kageru
+    - Discord: `kageru#1337`
