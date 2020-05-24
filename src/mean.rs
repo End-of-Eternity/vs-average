@@ -12,10 +12,10 @@ use vapoursynth::video_info::VideoInfo;
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
         $(
-            pub fn $fname(&self, frame: &mut FrameRefMut, src_clips: &[FrameRef]) {
-                let weights: Vec<_> = src_clips
+            pub fn $fname(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+                let weights: Vec<_> = src_frames
                     .iter()
-                    .map(|f| f.props().get::<&'_[u8]>("_PictType").unwrap_or(b"U")[0])
+                    .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
                     .map(|p| match p {
                         b'I' | b'i' => { self.multipliers[0] },
                         b'P' | b'p' => { self.multipliers[1] },
@@ -23,16 +23,19 @@ macro_rules! mean {
                         _ => { 1.0 },
                     })
                     .collect();
+
                 // we do the division once outside of the loop so we only need multiplication in the inner loop
                 let multiplier = 1.0 / weights.iter().sum::<f64>();
-                let first_frame = &src_clips[0];
-                for plane in 0..first_frame.format().plane_count() {
-                    for row in 0..first_frame.height(plane) {
-                        let src_rows: Vec<_> = src_clips
+
+                // `out_frame` has the same format as the input clips
+                let format = out_frame.format();
+                for plane in 0..format.plane_count() {
+                    for row in 0..out_frame.height(plane) {
+                        let src_rows: Vec<_> = src_frames
                             .iter()
                             .map(|f| f.plane_row::<$depth>(plane, row))
                             .collect();
-                        for (i, pixel) in frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
+                        for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
                             let weighted_sum: f64 = src_rows
                                 .iter()
                                 .map(|f| $depth_to_f64(f[i]))
