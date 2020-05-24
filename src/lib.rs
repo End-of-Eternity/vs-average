@@ -75,25 +75,18 @@ make_filter_function! {
         _core: CoreRef<'core>,
         clips: ValueIter<'_, 'core, Node<'core>>,
         preset: Option<i64>,
-        multipliers: Option<ValueIter<'_, 'core, f64>>
     ) -> Result<Option<Box<dyn Filter<'core> + 'core>>, Error> {
         let clips = clips.collect::<Vec<_>>();
         check_clips(&clips)?;
 
         let input_depth = property!(clips[0].info().format).bits_per_sample();
-        if input_depth != 8 && input_depth != 10 && input_depth != 12 && input_depth != 16 && input_depth != 32 {
-            bail!("Input depth can only be 8, 10, 12, 16 or 32")
+        if input_depth < 8 || input_depth > 32 {
+            bail!("Input depth can only be between 8 and 32");
         }
 
-        let multipliers = match multipliers {
-            Some(multipliers) => match &multipliers.collect::<Box<_>>()[..] {
-                &[i, p, b] => [i, p, b],
-                _ => bail!("Three parameters must be given for multipliers, in the form multipliers=[I, P, B]"),
-            },
-            _ => match preset {
-                Some(1) => [1.82, 1.3, 1.0], // x264 / 5
-                _ => [1.0, 1.0, 1.0], // balanced
-            },
+        let multipliers = match preset {
+            Some(1) => [1.82, 1.3, 1.0], // x264 / 5
+            _ => [1.0, 1.0, 1.0], // balanced
         };
 
         Ok(Some(Box::new(Mean { clips, multipliers })))
