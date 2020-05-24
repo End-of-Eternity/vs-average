@@ -1,13 +1,13 @@
 // Copyright (c) EoE & Nephren 2020. All rights reserved.
 
-use crate::common::*;
-use crate::{property, PLUGIN_NAME};
 use failure::{bail, format_err, Error};
 use half::f16;
 use vapoursynth::core::CoreRef;
 use vapoursynth::plugins::{Filter, FrameContext};
 use vapoursynth::prelude::*;
 use vapoursynth::video_info::VideoInfo;
+use crate::{property, PLUGIN_NAME};
+use crate::common::*;
 
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
@@ -17,10 +17,10 @@ macro_rules! mean {
                     .iter()
                     .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
                     .map(|p| match p {
-                        b'I' | b'i' => { self.multipliers[0] },
-                        b'P' | b'p' => { self.multipliers[1] },
-                        b'B' => { self.multipliers[2] },
-                        _ => { 1.0 },
+                        b'I' | b'i' => self.multipliers[0],
+                        b'P' | b'p' => self.multipliers[1],
+                        b'B' => self.multipliers[2],
+                        _ => 1.0,
                     })
                     .collect();
 
