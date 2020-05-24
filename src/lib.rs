@@ -84,12 +84,13 @@ make_filter_function! {
             bail!("Input depth can only be between 8 and 32");
         }
 
-        let multipliers = match preset {
-            Some(1) => [1.82, 1.3, 1.0], // x264 / 5
-            _ => [1.0, 1.0, 1.0], // balanced
+        let weights = match preset {
+            Some(1) => Some([1.82, 1.3, 1.0]),
+            Some(0) | None => None,
+            Some(p) => bail!("Preset {} not found", p),
         };
 
-        Ok(Some(Box::new(Mean { clips, multipliers })))
+        Ok(Some(Box::new(Mean { clips, weights })))
     }
 }
 

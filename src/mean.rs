@@ -21,22 +21,48 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
+macro_rules! mean_int {
+    ($($fname:ident($depth:ty, $internal:ty);)*) => {
+        $(
+            pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+                // `out_frame` has the same format as the input clips
+                let format = out_frame.format();
+                for plane in 0..format.plane_count() {
+                    for row in 0..out_frame.height(plane) {
+                        let src_rows: Vec<_> = src_frames
+                            .iter()
+                            .map(|f| f.plane_row::<$depth>(plane, row))
+                            .collect();
+                        for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
+                            let sum: $internal = src_rows
+                                .iter()
+                                .map(|f| f[i] as $internal)
+                                .sum();
+                            unsafe { std::ptr::write(pixel, (sum / src_frames.len() as $internal) as $depth) }
+                        }
+                    }
+                }
+            }
+        )*
+    };
+}
+
 pub struct Mean<'core> {
     // vector of our input clips
     pub clips: Vec<Node<'core>>,
     // IPB muiltiplier ratios
-    pub multipliers: [f64; 3],
+    pub weights: Option<[f64; 3]>,
 }
 
 impl<'core> Mean<'core> {
-    pub fn mean<T: F64Convertible>(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+    pub fn weighted_mean<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], weights: [f64; 3]) {
         let weights: Vec<_> = src_frames
             .iter()
             .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
             .map(|p| match p {
-                b'I' | b'i' => self.multipliers[0],
-                b'P' | b'p' => self.multipliers[1],
-                b'B' => self.multipliers[2],
+                b'I' | b'i' => weights[0],
+                b'P' | b'p' => weights[1],
+                b'B' => weights[2],
                 _ => 1.0,
             })
             .collect();
@@ -63,6 +89,34 @@ impl<'core> Mean<'core> {
                 }
             }
         }
+    }
+
+    pub fn mean_float<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+        let reciprocal = 1.0 / src_frames.len() as f64;
+
+        // `out_frame` has the same format as the input clips
+        let format = out_frame.format();
+        for plane in 0..format.plane_count() {
+            for row in 0..out_frame.height(plane) {
+                let src_rows: Vec<_> = src_frames
+                    .iter()
+                    .map(|f| f.plane_row::<T>(plane, row))
+                    .collect();
+                for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
+                    let sum: f64 = src_rows
+                        .iter()
+                        .map(|f| f[i].to_f64())
+                        .sum();
+                    unsafe { std::ptr::write(pixel, F64Convertible::from_f64(sum * reciprocal)) }
+                }
+            }
+        }
+    }
+
+    mean_int! {
+        mean_u8(u8, u16);
+        mean_u16(u16, u32);
+        mean_u32(u32, u64);
     }
 }
 
@@ -105,14 +159,25 @@ impl<'core> Filter<'core> for Mean<'core> {
             .collect::<Result<Vec<_>, _>>()?;
 
         // match input sample type and bits per sample
-        match (format.sample_type(), format.bits_per_sample()) {
-            (SampleType::Integer,       8) => self.mean::<u8> (&mut out_frame, &src_frames),
-            (SampleType::Integer,  9..=16) => self.mean::<u16>(&mut out_frame, &src_frames),
-            (SampleType::Integer, 17..=32) => self.mean::<u32>(&mut out_frame, &src_frames),
-            (SampleType::Float,        16) => self.mean::<f16>(&mut out_frame, &src_frames),
-            (SampleType::Float,        32) => self.mean::<f32>(&mut out_frame, &src_frames),
-            (sample_type, bits_per_sample) => 
-                bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
+        match self.weights {
+            Some(weights) => match (format.sample_type(), format.bits_per_sample()) {
+                (SampleType::Integer,       8) => Self::weighted_mean::<u8> (&mut out_frame, &src_frames, weights),
+                (SampleType::Integer,  9..=16) => Self::weighted_mean::<u16>(&mut out_frame, &src_frames, weights),
+                (SampleType::Integer, 17..=32) => Self::weighted_mean::<u32>(&mut out_frame, &src_frames, weights),
+                (SampleType::Float,        16) => Self::weighted_mean::<f16>(&mut out_frame, &src_frames, weights),
+                (SampleType::Float,        32) => Self::weighted_mean::<f32>(&mut out_frame, &src_frames, weights),
+                (sample_type, bits_per_sample) => 
+                    bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
+            },
+            None => match (format.sample_type(), format.bits_per_sample()) {
+                (SampleType::Integer,       8) => Self::mean_u8 (&mut out_frame, &src_frames),
+                (SampleType::Integer,  9..=16) => Self::mean_u16(&mut out_frame, &src_frames),
+                (SampleType::Integer, 17..=32) => Self::mean_u32(&mut out_frame, &src_frames),
+                (SampleType::Float,        16) => Self::mean_float::<f16>(&mut out_frame, &src_frames),
+                (SampleType::Float,        32) => Self::mean_float::<f32>(&mut out_frame, &src_frames),
+                (sample_type, bits_per_sample) => 
+                    bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
+            },
         }
 
         // return our resulting frame
