@@ -97,7 +97,7 @@ impl<'core> Filter<'core> for Mean<'core> {
         let resolution = property!(info.resolution);
 
         // construct our output frame
-        let mut frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
+        let mut out_frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
         let src_frames = self
             .clips
             .iter()
@@ -106,16 +106,16 @@ impl<'core> Filter<'core> for Mean<'core> {
 
         // match input sample type and bits per sample
         match (format.sample_type(), format.bits_per_sample()) {
-            (SampleType::Integer,       8) => self.mean::<u8> (&mut frame, &src_frames),
-            (SampleType::Integer,  9..=16) => self.mean::<u16>(&mut frame, &src_frames),
-            (SampleType::Integer, 17..=32) => self.mean::<u32>(&mut frame, &src_frames),
-            (SampleType::Float,        16) => self.mean::<f16>(&mut frame, &src_frames),
-            (SampleType::Float,        32) => self.mean::<f32>(&mut frame, &src_frames),
+            (SampleType::Integer,       8) => self.mean::<u8> (&mut out_frame, &src_frames),
+            (SampleType::Integer,  9..=16) => self.mean::<u16>(&mut out_frame, &src_frames),
+            (SampleType::Integer, 17..=32) => self.mean::<u32>(&mut out_frame, &src_frames),
+            (SampleType::Float,        16) => self.mean::<f16>(&mut out_frame, &src_frames),
+            (SampleType::Float,        32) => self.mean::<f32>(&mut out_frame, &src_frames),
             (sample_type, bits_per_sample) => 
                 bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
         }
 
         // return our resulting frame
-        Ok(frame.into())
+        Ok(out_frame.into())
     }
 }
