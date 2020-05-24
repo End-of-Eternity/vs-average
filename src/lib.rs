@@ -84,15 +84,15 @@ make_filter_function! {
             bail!("Input depth can only be between 8 and 32");
         }
 
-        let multipliers = match preset {
-            Some(0) => [1.00, 1.00, 1.00], // balanced
-            Some(1) => [1.82, 1.30, 1.00], // x264/5 defaults    (IP = 1.4, PB = 1.3)
-            Some(2) => [1.21, 1.10, 1.00], // x264 `--tune grain` (IP = 1.1, PB = 1.1)
-            Some(3) => [1.10, 1.00, 1.00], // x265 `--tune grain` (IP = 1.1, PB = 1.0)
-            _ => [1.0, 1.0, 1.0],          // defaults to balenced in case of no preset specified
+        let weights = match preset {
+            Some(1) => Some([1.82, 1.3, 1.0]),
+            Some(2) => Some([1.21, 1.10, 1.00]), // x264 `--tune grain` (IP = 1.1, PB = 1.1)
+            Some(3) => Some([1.10, 1.00, 1.00]), // x265 `--tune grain` (IP = 1.1, PB = 1.0)
+            Some(0) | None => None,
+            Some(p) => bail!("Preset {} not found", p),
         };
 
-        Ok(Some(Box::new(Mean { clips, multipliers })))
+        Ok(Some(Box::new(Mean { clips, weights })))
     }
 }
 
