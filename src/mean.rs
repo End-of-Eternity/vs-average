@@ -80,8 +80,8 @@ pub struct Mean<'core> {
 impl<'core> Mean<'core> {
     mean! {
         mean_u8<u8>(u8_to_f64, f64_to_u8);
-        mean_u10<u16>(u10_to_f64, f64_to_u16);
-        mean_u12<u16>(u12_to_f64, f64_to_u16);
+        mean_u10<u16>(u10_to_f64, f64_to_u10);
+        mean_u12<u16>(u12_to_f64, f64_to_u12);
         mean_u16<u16>(u16_to_f64, f64_to_u16);
         mean_u32<u32>(u32_to_f64, f64_to_u32);
 

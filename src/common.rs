@@ -16,10 +16,10 @@ macro_rules! int_to_f64 {
 }
 
 macro_rules! f64_to_int {
-    ($($fname:ident<$int:ty>;)*) => {
+    ($($fname:ident<$int:ty>($op:tt $n:literal);)*) => {
         $(
             #[inline]
-            pub fn $fname(n: f64) -> $int { n as $int }
+            pub fn $fname(n: f64) -> $int { (n as $int) $op $n }
         )*
     };
 }
@@ -33,9 +33,11 @@ int_to_f64! {
 }
 
 f64_to_int! {
-    f64_to_u8<u8>;
-    f64_to_u16<u16>;
-    f64_to_u32<u32>;
+    f64_to_u8<u8>(>> 0);
+    f64_to_u10<u16>(>> 4);
+    f64_to_u12<u16>(>> 2);
+    f64_to_u16<u16>(>> 0);
+    f64_to_u32<u32>(>> 0);
 }
 
 #[inline]
