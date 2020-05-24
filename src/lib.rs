@@ -85,8 +85,11 @@ make_filter_function! {
         }
 
         let multipliers = match preset {
-            Some(1) => [1.82, 1.3, 1.0], // x264 / 5
-            _ => [1.0, 1.0, 1.0], // balanced
+            Some(0) => [1.00, 1.00, 1.00], // balanced
+            Some(1) => [1.82, 1.30, 1.00], // x264/5 defaults    (IP = 1.4, PB = 1.3)
+            Some(2) => [1.21, 1.10, 1.00], // x264 `--tune grain` (IP = 1.1, PB = 1.1)
+            Some(3) => [1.10, 1.00, 1.00], // x265 `--tune grain` (IP = 1.1, PB = 1.0)
+            _ => [1.0, 1.0, 1.0],          // defaults to balenced in case of no preset specified
         };
 
         Ok(Some(Box::new(Mean { clips, multipliers })))
