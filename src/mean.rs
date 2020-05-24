@@ -9,6 +9,18 @@ use vapoursynth::video_info::VideoInfo;
 use crate::{property, PLUGIN_NAME};
 use crate::common::*;
 
+/*
+Couple notes on this following section,
+
+Internally, we're using f64 to do the calculations, and returning the same bitdepth as we input in the first place leads to a rounding error.
+However, if we allow outputting at a higher bitdepth than we started at, then we lose (well, a significant portion of) that error.
+This means we can get a high quality output, using lots of far smaller 8 bit clips, rather than lots of 16 bit clips, which are twice as large.
+
+Q: Okay so why's there a f16 down there since **litterally nobody** uses 16 bit floats?
+A: f16's are actually stored as two bytes on the CPU, so this is actually worth using *if* you want to do the calculations in float for some reason.
+   Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
+*/
+
 macro_rules! mean {
     ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
         $(
@@ -50,28 +62,6 @@ macro_rules! mean {
         )*
     };
 }
-
-/*
-Couple notes on this following section,
-
-Internally, we're using f64 to do the calculations, and returning the same bitdepth as we input in the first place leads to a rounding error.
-However, if we allow outputting at a higher bitdepth than we started at, then we lose (well, a significant portion of) that error.
-This means we can get a high quality output, using lots of far smaller 8 bit clips, rather than lots of 16 bit clips, which are twice as large.
-
-Q: Why aren't all bit depths implemented?
-A: A) it'd be long, and bloat the plugin more, + b) who uses 9 bit clips anyway?
-
-Q: In that case, why did you bother to implement 10 and 12 bit?
-A: Because the user might be working with HDR, and therefore/or 10 bit encodes, where they'd need to convert their source to 16 bit before inputting. which is a pain over multiple sources.
-
-Q: So why haven't you implemented 10 or 12 bit output?
-A: mainly because I couldn't be bothered, and because internally samples are still stored as u16, just with leading 0s. If the end user is going to directly output from this, and they want 10 bit,
-   they should really output 16 bit from average.Mean, and then dither down to 10 bit using resize.Point or similar.
-
-Q: Okay so why's there a f16 down there since **litterally nobody** uses 16 bit floats?
-A: f16's are actually stored as two bytes on the CPU, so this is actually worth using *if* you want to do the calculations in float for some reason.
-   Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
-*/
 
 pub struct Mean<'core> {
     // vector of our input clips
@@ -128,39 +118,20 @@ impl<'core> Filter<'core> for Mean<'core> {
         let src_frames = self
             .clips
             .iter()
-            .map(|f| {
-                f.get_frame_filter(context, n)
-                    .ok_or_else(|| format_err!("Could not retrieve source frame"))
-            })
+            .map(|f| f.get_frame_filter(context, n).ok_or_else(|| format_err!("Could not retrieve source frame")))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // this is the frame of the first source, not the first frame of the clip. Bad naming, blame Nephren
-        let first_frame = &src_frames[0];
-
-        // match input sample type to Integer or Float
-        match first_frame.format().sample_type() {
-            SampleType::Integer => {
-                let input_depth = property!(info.format).bits_per_sample();
-                // match input and output depths to correct functions
-                match input_depth {
-                    8 => self.mean_u8(&mut frame, &src_frames),
-                    10 => self.mean_u10(&mut frame, &src_frames),
-                    12 => self.mean_u12(&mut frame, &src_frames),
-                    16 => self.mean_u16(&mut frame, &src_frames),
-                    32 => self.mean_u32(&mut frame, &src_frames),
-                    // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
-                    _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
-                }
-            }
-            SampleType::Float => {
-                let input_depth = property!(info.format).bits_per_sample();
-                match input_depth {
-                    16 => self.mean_f16(&mut frame, &src_frames),
-                    32 => self.mean_f32(&mut frame, &src_frames),
-                    // catch all case for if none of the others matched. Theroetically this shouldn't be reachable.
-                    _ => bail!("{}: input depth {} not supported", PLUGIN_NAME, input_depth),
-                }
-            }
+        // match input sample type and bits per sample
+        match (format.sample_type(), format.bits_per_sample()) {
+            (SampleType::Integer,  8) => self.mean_u8 (&mut frame, &src_frames),
+            (SampleType::Integer, 10) => self.mean_u10(&mut frame, &src_frames),
+            (SampleType::Integer, 12) => self.mean_u12(&mut frame, &src_frames),
+            (SampleType::Integer, 16) => self.mean_u16(&mut frame, &src_frames),
+            (SampleType::Integer, 32) => self.mean_u32(&mut frame, &src_frames),
+            (SampleType::Float,   16) => self.mean_f16(&mut frame, &src_frames),
+            (SampleType::Float,   32) => self.mean_f32(&mut frame, &src_frames),
+            (sample_type, bits_per_sample) => 
+                bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
         }
 
         // return our resulting frame
