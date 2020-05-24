@@ -21,48 +21,6 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
-macro_rules! mean {
-    ($($fname:ident<$depth:ty>($depth_to_f64:path, $f64_to_depth:path);)*) => {
-        $(
-            pub fn $fname(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
-                let weights: Vec<_> = src_frames
-                    .iter()
-                    .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
-                    .map(|p| match p {
-                        b'I' | b'i' => self.multipliers[0],
-                        b'P' | b'p' => self.multipliers[1],
-                        b'B' => self.multipliers[2],
-                        _ => 1.0,
-                    })
-                    .collect();
-
-                // we do the division once outside of the loop so we only need multiplication in the inner loop
-                let multiplier = 1.0 / weights.iter().sum::<f64>();
-
-                // `out_frame` has the same format as the input clips
-                let format = out_frame.format();
-                for plane in 0..format.plane_count() {
-                    for row in 0..out_frame.height(plane) {
-                        let src_rows: Vec<_> = src_frames
-                            .iter()
-                            .map(|f| f.plane_row::<$depth>(plane, row))
-                            .collect();
-                        for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
-                            let weighted_sum: f64 = src_rows
-                                .iter()
-                                .map(|f| $depth_to_f64(f[i]))
-                                .zip(weights.iter())
-                                .map(|(p, w)| p * w)
-                                .sum();
-                            unsafe { std::ptr::write(pixel, $f64_to_depth(weighted_sum * multiplier)) }
-                        }
-                    }
-                }
-            }
-        )*
-    };
-}
-
 pub struct Mean<'core> {
     // vector of our input clips
     pub clips: Vec<Node<'core>>,
@@ -71,15 +29,40 @@ pub struct Mean<'core> {
 }
 
 impl<'core> Mean<'core> {
-    mean! {
-        mean_u8<u8>(u8_to_f64, f64_to_u8);
-        mean_u10<u16>(u10_to_f64, f64_to_u10);
-        mean_u12<u16>(u12_to_f64, f64_to_u12);
-        mean_u16<u16>(u16_to_f64, f64_to_u16);
-        mean_u32<u32>(u32_to_f64, f64_to_u32);
+    pub fn mean<T: F64Convertible>(&self, out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+        let weights: Vec<_> = src_frames
+            .iter()
+            .map(|f| f.props().get::<&'_ [u8]>("_PictType").unwrap_or(b"U")[0])
+            .map(|p| match p {
+                b'I' | b'i' => self.multipliers[0],
+                b'P' | b'p' => self.multipliers[1],
+                b'B' => self.multipliers[2],
+                _ => 1.0,
+            })
+            .collect();
 
-        mean_f16<f16>(f16_to_f64, f64_to_f16);
-        mean_f32<f32>(f32_to_f64, f64_to_f32);
+        // we do the division once outside of the loop so we only need multiplication in the inner loop
+        let multiplier = 1.0 / weights.iter().sum::<f64>();
+
+        // `out_frame` has the same format as the input clips
+        let format = out_frame.format();
+        for plane in 0..format.plane_count() {
+            for row in 0..out_frame.height(plane) {
+                let src_rows: Vec<_> = src_frames
+                    .iter()
+                    .map(|f| f.plane_row::<T>(plane, row))
+                    .collect();
+                for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
+                    let weighted_sum: f64 = src_rows
+                        .iter()
+                        .map(|f| f[i].to_f64())
+                        .zip(weights.iter())
+                        .map(|(p, w)| p * w)
+                        .sum();
+                    unsafe { std::ptr::write(pixel, F64Convertible::from_f64(weighted_sum * multiplier)) }
+                }
+            }
+        }
     }
 }
 
@@ -123,13 +106,11 @@ impl<'core> Filter<'core> for Mean<'core> {
 
         // match input sample type and bits per sample
         match (format.sample_type(), format.bits_per_sample()) {
-            (SampleType::Integer,  8) => self.mean_u8 (&mut frame, &src_frames),
-            (SampleType::Integer, 10) => self.mean_u10(&mut frame, &src_frames),
-            (SampleType::Integer, 12) => self.mean_u12(&mut frame, &src_frames),
-            (SampleType::Integer, 16) => self.mean_u16(&mut frame, &src_frames),
-            (SampleType::Integer, 32) => self.mean_u32(&mut frame, &src_frames),
-            (SampleType::Float,   16) => self.mean_f16(&mut frame, &src_frames),
-            (SampleType::Float,   32) => self.mean_f32(&mut frame, &src_frames),
+            (SampleType::Integer,       8) => self.mean::<u8> (&mut frame, &src_frames),
+            (SampleType::Integer,  9..=16) => self.mean::<u16>(&mut frame, &src_frames),
+            (SampleType::Integer, 17..=32) => self.mean::<u32>(&mut frame, &src_frames),
+            (SampleType::Float,        16) => self.mean::<f16>(&mut frame, &src_frames),
+            (SampleType::Float,        32) => self.mean::<f32>(&mut frame, &src_frames),
             (sample_type, bits_per_sample) => 
                 bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
         }

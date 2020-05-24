@@ -80,8 +80,8 @@ make_filter_function! {
         check_clips(&clips)?;
 
         let input_depth = property!(clips[0].info().format).bits_per_sample();
-        if input_depth != 8 && input_depth != 10 && input_depth != 12 && input_depth != 16 && input_depth != 32 {
-            bail!("Input depth can only be 8, 10, 12, 16 or 32");
+        if input_depth < 8 || input_depth > 32 {
+            bail!("Input depth can only be between 8 and 32");
         }
 
         let multipliers = match preset {
