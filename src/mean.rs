@@ -47,6 +47,34 @@ macro_rules! mean_int {
     };
 }
 
+macro_rules! mean_int_drop {
+    ($($fname:ident($depth:ty, $internal:ty);)*) => {
+        $(
+            pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], drop: usize) {
+                // `out_frame` has the same format as the input clips
+                let format = out_frame.format();
+                for plane in 0..format.plane_count() {
+                    for row in 0..out_frame.height(plane) {
+                        let src_rows: Vec<_> = src_frames
+                            .iter()
+                            .map(|f| f.plane_row::<$depth>(plane, row))
+                            .collect();
+                        for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
+                            let mut values: Vec<_> = src_rows
+                                .iter()
+                                .map(|f| f[i] as $internal)
+                                .collect();
+                            cocktail_nshakes(&mut values, drop);
+                            let sum: $internal = values.drain(drop..src_frames.len()-drop).sum();
+                            unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - drop*2) as $internal) as $depth) }
+                        }
+                    }
+                }
+            }
+        )*
+    };
+}
+
 pub struct Mean<'core> {
     // vector of our input clips
     pub clips: Vec<Node<'core>>,
@@ -118,6 +146,12 @@ impl<'core> Mean<'core> {
         mean_u16(u16, u32);
         mean_u32(u32, u64);
     }
+
+    mean_int_drop! {
+        mean_u8_drop(u8, u16);
+        mean_u16_drop(u16, u32);
+        mean_u32_drop(u32, u64);
+    }
 }
 
 impl<'core> Filter<'core> for Mean<'core> {
@@ -171,7 +205,7 @@ impl<'core> Filter<'core> for Mean<'core> {
             },
             None => match (format.sample_type(), format.bits_per_sample()) {
                 (SampleType::Integer,       8) => Self::mean_u8 (&mut out_frame, &src_frames),
-                (SampleType::Integer,  9..=16) => Self::mean_u16(&mut out_frame, &src_frames),
+                (SampleType::Integer,  9..=16) => Self::mean_u16_drop(&mut out_frame, &src_frames, 5),
                 (SampleType::Integer, 17..=32) => Self::mean_u32(&mut out_frame, &src_frames),
                 (SampleType::Float,        16) => Self::mean_float::<f16>(&mut out_frame, &src_frames),
                 (SampleType::Float,        32) => Self::mean_float::<f32>(&mut out_frame, &src_frames),

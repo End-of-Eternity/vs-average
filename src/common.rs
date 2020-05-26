@@ -72,3 +72,31 @@ impl F64Convertible for f32 {
         n as f32
     }
 }
+
+pub fn cocktail_nshakes<T: Ord>(a: &mut [T], mut n: usize) {
+    let len = a.len();
+    let mut swapped = true;
+    while swapped && n > 0 {
+        swapped = false;
+        let mut i = 0;
+        while i + 1 < len {
+            if a[i] > a[i + 1] {
+                a.swap(i, i + 1);
+                swapped = true;
+            }
+            i += 1;
+        }
+        if swapped {
+            swapped = false;
+            i = len - 1;
+            while i > 0 {
+                if a[i - 1] > a[i] {
+                    a.swap(i - 1, i);
+                    swapped = true;
+                }
+                i -= 1;
+            }
+        }
+        n -= 1;
+    }
+}
