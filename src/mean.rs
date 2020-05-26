@@ -26,7 +26,7 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
 // However, the vec gets deallocated at the end of the loop iteration. This means that every iteration,
 // a vec gets allocated, and then deallocated, which is slow (at least, according to benchmarks).
 // The idea with reusing vecs is to allocate a vec once, and inside the loop, it gets filled and cleared.
-// Filling is done using `extend`, which takes an iterator. Clearing is done by unsafely setting the length to 0.
+// Filling is done using `extend`, which takes an iterator. Clearing is done by "unsafely" setting the length to 0.
 
 // `set_len` SAFETY:
 // `set_len` directly sets the length of a vec. It is used here to "clear" a vec.
