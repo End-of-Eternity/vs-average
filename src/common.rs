@@ -73,7 +73,7 @@ impl F64Convertible for f32 {
     }
 }
 
-pub fn cocktail_nshakes<T: Ord>(a: &mut [T], mut n: usize) {
+pub fn cocktail_nshakes<T: PartialOrd>(a: &mut [T], mut n: usize) {
     let len = a.len();
     let mut swapped = true;
     while swapped && n > 0 {

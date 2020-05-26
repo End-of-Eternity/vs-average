@@ -75,6 +75,7 @@ make_filter_function! {
         _core: CoreRef<'core>,
         clips: ValueIter<'_, 'core, Node<'core>>,
         preset: Option<i64>,
+        discard: Option<i64>,
     ) -> Result<Option<Box<dyn Filter<'core> + 'core>>, Error> {
         let clips = clips.collect::<Vec<_>>();
         check_clips(&clips)?;
@@ -92,7 +93,19 @@ make_filter_function! {
             Some(p) => bail!("Preset {} not found", p),
         };
 
-        Ok(Some(Box::new(Mean { clips, weights })))
+        let discard = match discard {
+            Some(discard) => {
+                if discard < 0 || discard > (clips.len() as i64) || discard > (usize::MAX as i64) {
+                    bail!("No.")
+                }
+                else {
+                    Some(discard as usize)
+                }
+            },
+            None => None,
+        };
+
+        Ok(Some(Box::new(Mean { clips, weights, discard })))
     }
 }
 

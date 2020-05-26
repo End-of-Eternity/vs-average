@@ -47,10 +47,10 @@ macro_rules! mean_int {
     };
 }
 
-macro_rules! mean_int_drop {
+macro_rules! mean_int_discard {
     ($($fname:ident($depth:ty, $internal:ty);)*) => {
         $(
-            pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], drop: usize) {
+            pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], discard: usize) {
                 // `out_frame` has the same format as the input clips
                 let format = out_frame.format();
                 for plane in 0..format.plane_count() {
@@ -64,9 +64,9 @@ macro_rules! mean_int_drop {
                                 .iter()
                                 .map(|f| f[i] as $internal)
                                 .collect();
-                            cocktail_nshakes(&mut values, drop);
-                            let sum: $internal = values.drain(drop..src_frames.len()-drop).sum();
-                            unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - drop*2) as $internal) as $depth) }
+                            cocktail_nshakes(&mut values, discard);
+                            let sum: $internal = values.drain(discard..src_frames.len()-discard).sum();
+                            unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - discard*2) as $internal) as $depth) }
                         }
                     }
                 }
@@ -80,6 +80,7 @@ pub struct Mean<'core> {
     pub clips: Vec<Node<'core>>,
     // IPB muiltiplier ratios
     pub weights: Option<[f64; 3]>,
+    pub discard: Option<usize>,
 }
 
 impl<'core> Mean<'core> {
@@ -119,6 +120,30 @@ impl<'core> Mean<'core> {
         }
     }
 
+    pub fn mean_float_discard<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], discard: usize) {
+        let reciprocal = 1.0 / (src_frames.len() - discard*2) as f64;
+
+        // `out_frame` has the same format as the input clips
+        let format = out_frame.format();
+        for plane in 0..format.plane_count() {
+            for row in 0..out_frame.height(plane) {
+                let src_rows: Vec<_> = src_frames
+                    .iter()
+                    .map(|f| f.plane_row::<T>(plane, row))
+                    .collect();
+                for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
+                    let mut values: Vec<_> = src_rows
+                        .iter()
+                        .map(|f| f[i].to_f64())
+                        .collect();
+                        cocktail_nshakes(&mut values, discard);
+                        let sum: f64 = values.drain(discard..src_frames.len()-discard).sum();
+                    unsafe { std::ptr::write(pixel, F64Convertible::from_f64(sum * reciprocal)) }
+                }
+            }
+        }
+    }
+
     pub fn mean_float<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
         let reciprocal = 1.0 / src_frames.len() as f64;
 
@@ -140,17 +165,17 @@ impl<'core> Mean<'core> {
             }
         }
     }
-
+    
     mean_int! {
         mean_u8(u8, u16);
         mean_u16(u16, u32);
         mean_u32(u32, u64);
     }
 
-    mean_int_drop! {
-        mean_u8_drop(u8, u16);
-        mean_u16_drop(u16, u32);
-        mean_u32_drop(u32, u64);
+    mean_int_discard! {
+        mean_u8_discard(u8, u16);
+        mean_u16_discard(u16, u32);
+        mean_u32_discard(u32, u64);
     }
 }
 
@@ -193,8 +218,8 @@ impl<'core> Filter<'core> for Mean<'core> {
             .collect::<Result<Vec<_>, _>>()?;
 
         // match input sample type and bits per sample
-        match self.weights {
-            Some(weights) => match (format.sample_type(), format.bits_per_sample()) {
+        match (self.weights, self.discard) {
+            (Some(weights), None) => match (format.sample_type(), format.bits_per_sample()) {
                 (SampleType::Integer,       8) => Self::weighted_mean::<u8> (&mut out_frame, &src_frames, weights),
                 (SampleType::Integer,  9..=16) => Self::weighted_mean::<u16>(&mut out_frame, &src_frames, weights),
                 (SampleType::Integer, 17..=32) => Self::weighted_mean::<u32>(&mut out_frame, &src_frames, weights),
@@ -203,15 +228,26 @@ impl<'core> Filter<'core> for Mean<'core> {
                 (sample_type, bits_per_sample) => 
                     bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
             },
-            None => match (format.sample_type(), format.bits_per_sample()) {
+            (None, Some(discard)) => match (format.sample_type(), format.bits_per_sample()) {
+                (SampleType::Integer,       8) => Self::mean_u8_discard(&mut out_frame, &src_frames, discard),
+                (SampleType::Integer,  9..=16) => Self::mean_u16_discard(&mut out_frame, &src_frames, discard),
+                (SampleType::Integer, 17..=32) => Self::mean_u32_discard(&mut out_frame, &src_frames, discard),
+                (SampleType::Float,        16) => Self::mean_float_discard::<f16>(&mut out_frame, &src_frames, discard),
+                (SampleType::Float,        32) => Self::mean_float_discard::<f32>(&mut out_frame, &src_frames, discard),
+                (sample_type, bits_per_sample) => 
+                    bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
+            },
+            (None, None) => match (format.sample_type(), format.bits_per_sample()) {
                 (SampleType::Integer,       8) => Self::mean_u8 (&mut out_frame, &src_frames),
-                (SampleType::Integer,  9..=16) => Self::mean_u16_drop(&mut out_frame, &src_frames, 5),
+                (SampleType::Integer,  9..=16) => Self::mean_u16(&mut out_frame, &src_frames),
                 (SampleType::Integer, 17..=32) => Self::mean_u32(&mut out_frame, &src_frames),
                 (SampleType::Float,        16) => Self::mean_float::<f16>(&mut out_frame, &src_frames),
                 (SampleType::Float,        32) => Self::mean_float::<f32>(&mut out_frame, &src_frames),
                 (sample_type, bits_per_sample) => 
                     bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
             },
+            (Some(_), Some(_)) => 
+                bail!("Tried to use weighting and discard. This shouldn't be possible."),
         }
 
         // return our resulting frame
