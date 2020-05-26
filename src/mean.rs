@@ -21,18 +21,34 @@ A: f16's are actually stored as two bytes on the CPU, so this is actually worth 
    Why you would want to, idk, but it would work, and it'd again be less ram than the alternative.
 */
 
+// Reusing Vecs:
+// Collecting a vec from an iterator inside a loop allocates a new vec (not surprising).
+// However, the vec gets deallocated at the end of the loop iteration. This means that every iteration,
+// a vec gets allocated, and then deallocated, which is slow (at least, according to benchmarks).
+// The idea with reusing vecs is to allocate a vec once, and inside the loop, it gets filled and cleared.
+// Filling is done using `extend`, which takes an iterator. Clearing is done by unsafely setting the length to 0.
+
+// `set_len` SAFETY:
+// `set_len` directly sets the length of a vec. It is used here to "clear" a vec.
+// Compared to using the `clear` method, `set_len` does not run the drop code of the cleared elements.
+// In this case, the elements stored in the vec do not have special drop code. Therefore, it is safe to do so.
+
 macro_rules! mean_int {
     ($($fname:ident($depth:ty, $internal:ty);)*) => {
         $(
             pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
+                // See note on reusing vecs.
+                let mut src_rows = Vec::with_capacity(src_frames.len());
+
                 // `out_frame` has the same format as the input clips
                 let format = out_frame.format();
+
                 for plane in 0..format.plane_count() {
                     for row in 0..out_frame.height(plane) {
-                        let src_rows: Vec<_> = src_frames
+                        // Vec reuse: filling
+                        src_rows.extend(src_frames
                             .iter()
-                            .map(|f| f.plane_row::<$depth>(plane, row))
-                            .collect();
+                            .map(|f| f.plane_row::<$depth>(plane, row)));
                         for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
                             let sum: $internal = src_rows
                                 .iter()
@@ -40,6 +56,8 @@ macro_rules! mean_int {
                                 .sum();
                             unsafe { std::ptr::write(pixel, (sum / src_frames.len() as $internal) as $depth) }
                         }
+                        // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                        unsafe { src_rows.set_len(0); }
                     }
                 }
             }
@@ -97,16 +115,20 @@ impl<'core> Mean<'core> {
             .collect();
 
         // we do the division once outside of the loop so we only need multiplication in the inner loop
-        let multiplier = 1.0 / weights.iter().sum::<f64>();
+        let reciprocal = 1.0 / weights.iter().sum::<f64>();
+
+        // See note on reusing vecs.
+        let mut src_rows = Vec::with_capacity(src_frames.len());
 
         // `out_frame` has the same format as the input clips
         let format = out_frame.format();
+        
         for plane in 0..format.plane_count() {
             for row in 0..out_frame.height(plane) {
-                let src_rows: Vec<_> = src_frames
+                // Vec reuse: filling
+                src_rows.extend(src_frames
                     .iter()
-                    .map(|f| f.plane_row::<T>(plane, row))
-                    .collect();
+                    .map(|f| f.plane_row::<T>(plane, row)));
                 for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
                     let weighted_sum: f64 = src_rows
                         .iter()
@@ -114,8 +136,10 @@ impl<'core> Mean<'core> {
                         .zip(weights.iter())
                         .map(|(p, w)| p * w)
                         .sum();
-                    unsafe { std::ptr::write(pixel, F64Convertible::from_f64(weighted_sum * multiplier)) }
+                    unsafe { std::ptr::write(pixel, F64Convertible::from_f64(weighted_sum * reciprocal)) }
                 }
+                // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                unsafe { src_rows.set_len(0); }
             }
         }
     }
@@ -147,14 +171,18 @@ impl<'core> Mean<'core> {
     pub fn mean_float<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef]) {
         let reciprocal = 1.0 / src_frames.len() as f64;
 
+        // See note on reusing vecs.
+        let mut src_rows = Vec::with_capacity(src_frames.len());
+
         // `out_frame` has the same format as the input clips
         let format = out_frame.format();
+
         for plane in 0..format.plane_count() {
             for row in 0..out_frame.height(plane) {
-                let src_rows: Vec<_> = src_frames
+                // Vec reuse: filling
+                src_rows.extend(src_frames
                     .iter()
-                    .map(|f| f.plane_row::<T>(plane, row))
-                    .collect();
+                    .map(|f| f.plane_row::<T>(plane, row)));
                 for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
                     let sum: f64 = src_rows
                         .iter()
@@ -162,6 +190,8 @@ impl<'core> Mean<'core> {
                         .sum();
                     unsafe { std::ptr::write(pixel, F64Convertible::from_f64(sum * reciprocal)) }
                 }
+                // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                unsafe { src_rows.set_len(0); }
             }
         }
     }
