@@ -95,7 +95,7 @@ make_filter_function! {
 
         let discard = match discard {
             Some(discard) => {
-                if discard < 0 || discard > (clips.len() as i64) || discard > (usize::MAX as i64) {
+                if discard < 0 || discard > (clips.len() as i64) {
                     bail!("No.")
                 }
                 else {
