@@ -69,23 +69,32 @@ macro_rules! mean_int_discard {
     ($($fname:ident($depth:ty, $internal:ty);)*) => {
         $(
             pub fn $fname(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], discard: usize) {
+                // See note on reusing vecs.
+                let mut src_rows = Vec::with_capacity(src_frames.len());
+                let mut values = Vec::with_capacity(src_frames.len());
+
                 // `out_frame` has the same format as the input clips
                 let format = out_frame.format();
+
                 for plane in 0..format.plane_count() {
                     for row in 0..out_frame.height(plane) {
-                        let src_rows: Vec<_> = src_frames
+                        // Vec reuse: filling
+                        src_rows.extend(src_frames
                             .iter()
-                            .map(|f| f.plane_row::<$depth>(plane, row))
-                            .collect();
+                            .map(|f| f.plane_row::<$depth>(plane, row)));
                         for (i, pixel) in out_frame.plane_row_mut::<$depth>(plane, row).iter_mut().enumerate() {
-                            let mut values: Vec<_> = src_rows
+                            // Vec reuse: filling
+                            values.extend(src_rows
                                 .iter()
-                                .map(|f| f[i] as $internal)
-                                .collect();
+                                .map(|f| f[i] as $internal));
                             cocktail_nshakes(&mut values, discard);
                             let sum: $internal = values.drain(discard..src_frames.len()-discard).sum();
-                            unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - discard*2) as $internal) as $depth) }
+                            unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - discard * 2) as $internal) as $depth) }
+                            // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                            unsafe { values.set_len(0); }
                         }
+                        // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                        unsafe { src_rows.set_len(0); }
                     }
                 }
             }
@@ -145,25 +154,34 @@ impl<'core> Mean<'core> {
     }
 
     pub fn mean_float_discard<T: F64Convertible>(out_frame: &mut FrameRefMut, src_frames: &[FrameRef], discard: usize) {
-        let reciprocal = 1.0 / (src_frames.len() - discard*2) as f64;
+        let reciprocal = 1.0 / (src_frames.len() - discard * 2) as f64;
+
+        // See note on reusing vecs.
+        let mut src_rows = Vec::with_capacity(src_frames.len());
+        let mut values = Vec::with_capacity(src_frames.len());
 
         // `out_frame` has the same format as the input clips
         let format = out_frame.format();
+
         for plane in 0..format.plane_count() {
             for row in 0..out_frame.height(plane) {
-                let src_rows: Vec<_> = src_frames
+                // Vec reuse: filling
+                src_rows.extend(src_frames
                     .iter()
-                    .map(|f| f.plane_row::<T>(plane, row))
-                    .collect();
+                    .map(|f| f.plane_row::<T>(plane, row)));
                 for (i, pixel) in out_frame.plane_row_mut::<T>(plane, row).iter_mut().enumerate() {
-                    let mut values: Vec<_> = src_rows
+                    // Vec reuse: filling
+                    values.extend(src_rows
                         .iter()
-                        .map(|f| f[i].to_f64())
-                        .collect();
-                        cocktail_nshakes(&mut values, discard);
-                        let sum: f64 = values.drain(discard..src_frames.len()-discard).sum();
+                        .map(|f| f[i].to_f64()));
+                    cocktail_nshakes(&mut values, discard);
+                    let sum: f64 = values.drain(discard..src_frames.len() - discard).sum();
                     unsafe { std::ptr::write(pixel, F64Convertible::from_f64(sum * reciprocal)) }
+                    // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                    unsafe { values.set_len(0); }
                 }
+                // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
+                unsafe { src_rows.set_len(0); }
             }
         }
     }
