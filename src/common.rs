@@ -73,30 +73,33 @@ impl F64Convertible for f32 {
     }
 }
 
-pub fn cocktail_nshakes<T: PartialOrd>(a: &mut [T], mut n: usize) {
+pub unsafe fn swap<T>(slice: &mut [T], a: usize, b: usize) {
+    let pa: *mut T = slice.get_unchecked_mut(a);
+    let pb: *mut T = slice.get_unchecked_mut(b);
+    std::ptr::swap(pa, pb);
+}
+
+pub unsafe fn ultra_pepega<T: PartialOrd>(a: &mut [T], n: usize) {
     let len = a.len();
-    let mut swapped = true;
-    while swapped && n > 0 {
-        swapped = false;
-        let mut i = 0;
-        while i + 1 < len {
-            if a[i] > a[i + 1] {
-                a.swap(i, i + 1);
-                swapped = true;
-            }
-            i += 1;
-        }
-        if swapped {
-            swapped = false;
-            i = len - 1;
-            while i > 0 {
-                if a[i - 1] > a[i] {
-                    a.swap(i - 1, i);
-                    swapped = true;
-                }
-                i -= 1;
+    // max
+    for i in 0..n {
+        let mut index = 0;
+        for j in 0..len - i {
+            if *a.get_unchecked(j) > *a.get_unchecked(index) {
+                index = j;
             }
         }
-        n -= 1;
+        swap(a, index, len - (i + 1));
+    }
+    // min
+    let len = a.len() - n;
+    for i in 0..n {
+        let mut index = 0;
+        for j in 0..len - i {
+            if *a.get_unchecked(j) < *a.get_unchecked(index) {
+                index = j;
+            }
+        }
+        swap(a, index, len - (i + 1));
     }
 }

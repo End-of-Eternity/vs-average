@@ -87,8 +87,8 @@ macro_rules! mean_int_discard {
                             values.extend(src_rows
                                 .iter()
                                 .map(|f| f[i] as $internal));
-                            cocktail_nshakes(&mut values, discard);
-                            let sum: $internal = values.drain(discard..src_frames.len()-discard).sum();
+                            unsafe { ultra_pepega(&mut values, discard); }
+                            let sum: $internal = values.drain(0..src_frames.len() - discard*2).sum();
                             unsafe { std::ptr::write(pixel, (sum / (src_frames.len() - discard * 2) as $internal) as $depth) }
                             // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
                             unsafe { values.set_len(0); }
@@ -174,8 +174,8 @@ impl<'core> Mean<'core> {
                     values.extend(src_rows
                         .iter()
                         .map(|f| f[i].to_f64()));
-                    cocktail_nshakes(&mut values, discard);
-                    let sum: f64 = values.drain(discard..src_frames.len() - discard).sum();
+                    unsafe { ultra_pepega(&mut values, discard); }
+                    let sum: f64 = values.drain(0..src_frames.len() - discard*2).sum();
                     unsafe { std::ptr::write(pixel, F64Convertible::from_f64(sum * reciprocal)) }
                     // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
                     unsafe { values.set_len(0); }
