@@ -95,7 +95,6 @@ macro_rules! mean_int_discard {
                         }
                         // Vec reuse: (unsafe) clearing; see `set_len` SAFETY.
                         unsafe { src_rows.set_len(0); }
-
                     }
                 }
             }
