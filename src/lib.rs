@@ -93,7 +93,7 @@ make_filter_function! {
             (Some(d), Some(0)) | (Some(d), None) if d > 0 && d < ((clips.len() / 2) as i64) => (Some(d as usize), None),
             
             // discard unspecified or 0 + legal preset
-            (None, Some(0)) | (Some(0), Some(0)) | (None, None) => (None, None), // balanced ([1, 1, 1] internally])
+            (None, Some(0)) | (Some(0), Some(0)) | (None, None) | (Some(0), None) => (None, None), // balanced ([1, 1, 1] internally])
             (None, Some(1)) | (Some(0), Some(1)) => (None, Some([1.82, 1.30, 1.00])), // x264/5 defaults    (IP = 1.4, PB = 1.3)
             (None, Some(2)) | (Some(0), Some(2)) => (None, Some([1.21, 1.10, 1.00])), // x264 `--tune grain` (IP = 1.1, PB = 1.1)
             (None, Some(3)) | (Some(0), Some(3)) => (None, Some([1.10, 1.00, 1.00])), // x265 `--tune grain` (IP = 1.1, PB = 1.0)
