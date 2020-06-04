@@ -1,7 +1,7 @@
 [package]
 name = "vs-average"
 description = "A VapourSynth plugin for averaging clips together"
-version = "0.2.0"
+version = "0.4.0-beta"
 authors = ["EoE", "Nephren"]
 license = "Apache-2.0"
 edition = "2018"
