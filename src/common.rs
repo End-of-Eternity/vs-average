@@ -1,4 +1,4 @@
-// Copyright (c) EoE & Nephren 2020. All rights reserved.
+// Copyright (c) EoE & Nephren 2020-2021. All rights reserved.
 
 //! Common code
 
@@ -54,7 +54,7 @@ impl F64Convertible for f16 {
     fn to_f64(self) -> f64 {
         self.to_f64()
     }
-    
+
     #[inline]
     fn from_f64(n: f64) -> Self {
         f16::from_f64(n)

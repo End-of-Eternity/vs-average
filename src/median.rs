@@ -1,4 +1,4 @@
-// Copyright (c) EoE & Nephren 2020. All rights reserved.
+// Copyright (c) EoE & Nephren 2020-2021. All rights reserved.
 
 use failure::{Error, bail, format_err};
 use half::f16;

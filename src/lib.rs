@@ -1,7 +1,7 @@
-// Copyright (c) EoE & Nephren 2020. All rights reserved.
+// Copyright (c) EoE & Nephren 2020-2021. All rights reserved.
 
 //! # vs-average
-//! 
+//!
 //! A VapourSynth plugin for averaging clips together
 
 mod mean;
@@ -61,7 +61,7 @@ make_filter_function! {
         clips: ValueIter<'_, 'core, Node<'core>>,
     ) -> Result<Option<Box<dyn Filter<'core> + 'core>>, Error> {
         let clips = clips.collect::<Vec<_>>();
-        check_clips(&clips)?;        
+        check_clips(&clips)?;
 
         Ok(Some(Box::new(Median { clips })))
     }
@@ -88,16 +88,16 @@ make_filter_function! {
         // discard + weights handling
         // this is really horrid, there must be a more elegant way of doing this
         let (discard, weights) = match (discard, preset) {
-            
+
             // discard exists, and is within bounds + preset unspecified or 0
             (Some(d), Some(0)) | (Some(d), None) if d > 0 && d < ((clips.len() / 2) as i64) => (Some(d as usize), None),
-            
+
             // discard unspecified or 0 + legal preset
             (None, Some(0)) | (Some(0), Some(0)) | (None, None) | (Some(0), None) => (None, None), // balanced ([1, 1, 1] internally])
             (None, Some(1)) | (Some(0), Some(1)) => (None, Some([1.82, 1.30, 1.00])), // x264/5 defaults    (IP = 1.4, PB = 1.3)
             (None, Some(2)) | (Some(0), Some(2)) => (None, Some([1.21, 1.10, 1.00])), // x264 `--tune grain` (IP = 1.1, PB = 1.1)
             (None, Some(3)) | (Some(0), Some(3)) => (None, Some([1.10, 1.00, 1.00])), // x265 `--tune grain` (IP = 1.1, PB = 1.0)
-            
+
             // discard OOB
             (Some(_), Some(0)) | (Some(_), None) => bail!("discard cannot be negative, or larger than half the length of input clip list!"),
             // preset OOB
