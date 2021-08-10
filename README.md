@@ -1,6 +1,6 @@
 # vs-average
 
-Copyright © 2020 EoE & Nephren
+Copyright © 2020-2021 EoE & Nephren
 
 A VapourSynth plugin for averaging clips together.<br />
 _Early release, not all features are tested. Please report any issues either here, or in EoE's dms (See bottom)_
