@@ -131,10 +131,12 @@ impl<'core> Filter<'core> for Median<'core> {
         let format = property!(info.format);
         let resolution = property!(info.resolution);
 
-        let mut out_frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
         let src_frames = self.clips.iter()
             .map(|f| f.get_frame_filter(context, n).ok_or_else(|| format_err!("Could not retrieve source frame")))
             .collect::<Result<Vec<_>, _>>()?;
+
+        let prop_src = Some(&*src_frames[0]);
+        let mut out_frame = unsafe { FrameRefMut::new_uninitialized(core, prop_src, format, resolution) };
 
         match (format.sample_type(), format.bits_per_sample()) {
             (SampleType::Integer,       8) => Self::median_u8(&mut out_frame, &src_frames),
@@ -142,7 +144,7 @@ impl<'core> Filter<'core> for Median<'core> {
             (SampleType::Integer, 17..=32) => Self::median_u32(&mut out_frame, &src_frames),
             (SampleType::Float,        16) => Self::median_float::<f16>(&mut out_frame, &src_frames),
             (SampleType::Float,        32) => Self::median_float::<f32>(&mut out_frame, &src_frames),
-            (sample_type, bits_per_sample) => 
+            (sample_type, bits_per_sample) =>
                 bail!("{}: input depth {} not supported for sample type {}. This shouldn't be possible", PLUGIN_NAME, bits_per_sample, sample_type),
         }
 

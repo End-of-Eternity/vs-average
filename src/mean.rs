@@ -131,7 +131,7 @@ impl<'core> Mean<'core> {
 
         // `out_frame` has the same format as the input clips
         let format = out_frame.format();
-        
+
         for plane in 0..format.plane_count() {
             for row in 0..out_frame.height(plane) {
                 // Vec reuse: filling
@@ -213,7 +213,7 @@ impl<'core> Mean<'core> {
             }
         }
     }
-    
+
     mean_int! {
         mean_u8(u8, u16);
         mean_u16(u16, u32);
@@ -257,13 +257,15 @@ impl<'core> Filter<'core> for Mean<'core> {
         let format = property!(info.format);
         let resolution = property!(info.resolution);
 
-        // construct our output frame
-        let mut out_frame = unsafe { FrameRefMut::new_uninitialized(core, None, format, resolution) };
+
         let src_frames = self
             .clips
             .iter()
             .map(|f| f.get_frame_filter(context, n).ok_or_else(|| format_err!("Could not retrieve source frame")))
             .collect::<Result<Vec<_>, _>>()?;
+
+        let prop_src = Some(&*src_frames[0]);
+        let mut out_frame = unsafe { FrameRefMut::new_uninitialized(core, prop_src, format, resolution) };
 
         // match input sample type and bits per sample
         match (self.weights, self.discard) {
@@ -273,7 +275,7 @@ impl<'core> Filter<'core> for Mean<'core> {
                 (SampleType::Integer, 17..=32) => Self::weighted_mean::<u32>(&mut out_frame, &src_frames, weights),
                 (SampleType::Float,        16) => Self::weighted_mean::<f16>(&mut out_frame, &src_frames, weights),
                 (SampleType::Float,        32) => Self::weighted_mean::<f32>(&mut out_frame, &src_frames, weights),
-                (sample_type, bits_per_sample) => 
+                (sample_type, bits_per_sample) =>
                     bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
             },
             (None, Some(discard)) => match (format.sample_type(), format.bits_per_sample()) {
@@ -282,7 +284,7 @@ impl<'core> Filter<'core> for Mean<'core> {
                 (SampleType::Integer, 17..=32) => Self::mean_u32_discard(&mut out_frame, &src_frames, discard),
                 (SampleType::Float,        16) => Self::mean_float_discard::<f16>(&mut out_frame, &src_frames, discard),
                 (SampleType::Float,        32) => Self::mean_float_discard::<f32>(&mut out_frame, &src_frames, discard),
-                (sample_type, bits_per_sample) => 
+                (sample_type, bits_per_sample) =>
                     bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
             },
             (None, None) => match (format.sample_type(), format.bits_per_sample()) {
@@ -291,10 +293,10 @@ impl<'core> Filter<'core> for Mean<'core> {
                 (SampleType::Integer, 17..=32) => Self::mean_u32(&mut out_frame, &src_frames),
                 (SampleType::Float,        16) => Self::mean_float::<f16>(&mut out_frame, &src_frames),
                 (SampleType::Float,        32) => Self::mean_float::<f32>(&mut out_frame, &src_frames),
-                (sample_type, bits_per_sample) => 
+                (sample_type, bits_per_sample) =>
                     bail!("{}: input depth {} not supported for sample type {}", PLUGIN_NAME, bits_per_sample, sample_type),
             },
-            (Some(_), Some(_)) => 
+            (Some(_), Some(_)) =>
                 bail!("Tried to use weighting and discard. This shouldn't be possible."),
         }
 
